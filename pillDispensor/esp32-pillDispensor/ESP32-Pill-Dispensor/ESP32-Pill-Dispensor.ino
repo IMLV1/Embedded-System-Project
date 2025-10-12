@@ -854,6 +854,12 @@ void setup() {
   pinMode(LEDRED, OUTPUT);
   pinMode(SW, INPUT_PULLUP);
 
+  // Step Moter
+  pinMode(B1, OUTPUT);
+  pinMode(B2, OUTPUT);
+  pinMode(B3, OUTPUT);
+  pinMode(B4, OUTPUT);
+
   digitalWrite(BUZZER, HIGH);
   digitalWrite(LEDRED, LOW);
 
