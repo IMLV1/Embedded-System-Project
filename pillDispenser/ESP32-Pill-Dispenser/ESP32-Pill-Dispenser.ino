@@ -208,20 +208,23 @@ void loadTimes();      // Load scheduled pill times from EEPROM
 // =======================================================================================
 
 void TaskWiFi(void *pvParameters){
-  for(;;){
+  for(;;){  // Infinite loop for the FreeRTOS task 
+    // ===== WiFi connection check =====
     if (!WiFi.isConnected()) {
-      connectWiFi();      
+      connectWiFi();       // Attempt to connect to WiFi using WiFiManager
     }
 
+    // ===== MQTT handling when WiFi is connected =====
     if (WiFi.isConnected()) {
       if (!client.connected()) {
-        reconnectMQTT(); 
+        reconnectMQTT();  // Reconnect to MQTT broker if disconnected
       }
 
-      client.loop();
+      client.loop();   // Process incoming MQTT messages and callbacks
 
+      // If MQTT connected and there are pending pill logs, send them
       if (client.connected() && !pillLogs.empty()) {
-        sendLogBatch();
+        sendLogBatch();  // Publish logs to MQTT and clear pillLogs
       }
     }
 
@@ -288,9 +291,10 @@ void setupRTC_Module() {
 // =======================================================================================
 
 void setupLCD_Moddule() {
-  lcd.init();        
-  lcd.backlight();   
+  lcd.init();         // Initialize the LCD module
+  lcd.backlight();    // Turn on the backlight
 
+  // Display welcome message
   lcd.setCursor(0, 0); 
   lcd.print("Pill-Dispensor"); 
 
@@ -303,25 +307,29 @@ void setupLCD_Moddule() {
 void waitPillLcd() {
   //Serial.println("DEBUG: Enter waitPillLcd()");
 
+  // ===== Show stop message if active =====
   if (showStopMsg) {
     //Serial.println("showStopMsg = true");
 
+    // Check if 3 seconds have passed since stop message started
     if (millis() - stopMsgStart >= 3000) {
-      showStopMsg = false;
+      showStopMsg = false;   // Clear stop message flag
       currentTime = "-1";
     }
 
-    return;
+    return;    // Skip further LCD updates while stop message is shown
   }
 
+  // ===== Show pill ready animation if a pill alert is active =====
   if (handlePilling) {
     //Serial.println("handlePilling = true");
 
     String dots = "";
 
+    // Update dot animation every 300 ms
     if (millis() - lastDotMotion >= 300) {
       lastDotMotion = millis();
-      countMotion = (countMotion + 1) % 5; // 0 - 4
+      countMotion = (countMotion + 1) % 5; // Loop 0 - 4 for animation
 
       switch(countMotion) {
         case 0:
@@ -357,6 +365,7 @@ void waitPillLcd() {
 
   //Serial.println("Normal display zone");
 
+  // ===== Normal display when no pill alert =====
   if (Slot_times.empty()) {
     lcd.setCursor(0, 0);
     lcd.print("No schedule!    ");
@@ -367,6 +376,7 @@ void waitPillLcd() {
     return;
   } 
 
+  // Count how many slots have been triggered
   int PillTrigerAll = 0;
   for (size_t i = 0; i < Slot_times.size(); i++) {
     if (Slot_times[i].triger) PillTrigerAll++;
@@ -375,7 +385,9 @@ void waitPillLcd() {
   // Serial.print("PillTrigerAll : ");
   // Serial.println(PillTrigerAll);
 
+  // Find next pending pill time
   if (PillTrigerAll == Slot_times.size()) {
+    // All pills taken for the day
     lcd.setCursor(0, 0);
     lcd.print("Pills empty!    ");
 
@@ -385,6 +397,7 @@ void waitPillLcd() {
     return;
   }
   
+  // Find next pending pill time
   String h = "--", m = "--";
   for (size_t i = 0; i < Slot_times.size(); i++) {
     if (!Slot_times[i].triger) {
@@ -394,11 +407,12 @@ void waitPillLcd() {
     }
   }
 
+  // ===== Display "It's time!" animation for next pill =====
   if (millis() - lastLCDMotion >= 500) { 
     lastLCDMotion = millis();
 
     // std::string anim = "/-\\|";
-    const char anim[] = {'/', '-', 0, '|'};
+    const char anim[] = {'/', '-', 0, '|'};  // Simple spinner animation
     countMotion = (countMotion + 1) % 4;
 
     lcd.setCursor(0, 0);
@@ -419,16 +433,18 @@ void ShowMsg(bool taken) {
   showStopMsg = true;
   stopMsgStart = millis();
 
-  if (taken) {
+  if (taken) {    // If the pill was taken successfully
     lcd.setCursor(0, 0);
     lcd.print("Pill Taken!     ");
 
     lcd.setCursor(0, 1);
     lcd.print("Good job :)");
-  } else {
+  } else { 
+    // If the pill was missed
     lcd.setCursor(0, 0);
     lcd.print("Missed dose!    ");
 
+    // Extract hour and minute from currentTime string ("HH:MM")
     String h = currentTime.substring(0, 2); 
     String m = currentTime.substring(3, 5); 
 
@@ -446,58 +462,68 @@ void ShowMsg(bool taken) {
 // =======================================================================================
 
 void connectWiFi() {
-  if (!wmStarted) {
+  if (!wmStarted) {     // Ensure WiFiManager is started only once
     wmStarted = true;
-    wm.setTimeout(5);  
+    wm.setTimeout(5);   // Set WiFiManager portal timeout to 5 seconds
     Serial.println("Starting WiFiManager portal...");
 
-    bool res = wm.autoConnect("Pill-Dispensor"); // non-blocking
+    // ===== Attempt automatic WiFi connection using WiFiManager =====
+    // autoConnect() will try to connect to the previously saved WiFi credentials.
+    // If no credentials exist or connection fails, it will create a temporary Access Point (AP)
+    // with the specified SSID ("Pill-Dispensor") so the user can connect and configure WiFi via a web portal.
+    // Returns true if connected to WiFi successfully, false if timeout or failure.
+    bool res = wm.autoConnect("Pill-Dispenser"); // Non-blocking
     if (res) {
       Serial.println("WiFi Connected!");
       Serial.print("IP: "); Serial.println(WiFi.localIP());
-      wifiAvailable = true;
+      wifiAvailable = true;    // WiFi is available
 
+      // Configure MQTT client
       client.setServer(MQTT_SERVER, MQTT_PORT);
       client.setCallback(callback);
 
       if (client.connect("ESP32Client", NULL, NULL, SEND_STATUS, 0, true, "offline")) {
-        client.publish(SEND_STATUS, "online", true);
-        client.subscribe(REQUEST_ADD_TIME);
+        client.publish(SEND_STATUS, "online", true);   // Publish online status
+        client.subscribe(REQUEST_ADD_TIME);            // Subscribe to topic for adding pill times
         Serial.println("MQTT Connected");
       }
 
     } else {
       Serial.println("WiFi NOT connected, will retry...");
-      wifiAvailable = false;
+      wifiAvailable = false; // WiFi unavailable
     }
 
-    lastWifiAttempt = millis();
+    lastWifiAttempt = millis();   // Record time of last WiFi attempt
   }
 }
 
 
 void reconnectMQTT() {
-  if (!WiFi.isConnected()) return;
+  if (!WiFi.isConnected()) return;  // Do nothing if WiFi is not connected
 
   unsigned long now = millis();
+
+  // Try to reconnect MQTT every 2 seconds if not connected
   if (!client.connected() && (now - lastMQTTAttempt >= 2000)) { // reconnect ทุก 2 วิ
-    lastMQTTAttempt = now;
+    lastMQTTAttempt = now;    // Update last attempt time
 
     Serial.print("Connecting to MQTT...");
 
+    // Attempt to connect to MQTT broker
     if (client.connect("ESP32Client", NULL, NULL, SEND_STATUS, 0, true, "offline")) {
       Serial.println("connected");
-      client.subscribe(REQUEST_ADD_TIME);
-      client.publish(SEND_STATUS, "online", true);
+      client.subscribe(REQUEST_ADD_TIME);               // Subscribe to topic for adding pill times
+      client.publish(SEND_STATUS, "online", true);      // Publish online status
     } else {
       Serial.print("failed, rc=");
-      Serial.println(client.state());
+      Serial.println(client.state());   // Print MQTT connection error code
     }
   }
 
+  // If MQTT is connected but WiFi is lost, disconnect MQTT
   if (client.connected() && WiFi.status() != WL_CONNECTED) {
-    client.publish(SEND_STATUS, "offline", true);
-    client.disconnect();
+    client.publish(SEND_STATUS, "offline", true);       // Publish offline status
+    client.disconnect();                                // Disconnect MQTT client
     Serial.println("MQTT disconnected due to WiFi lost");
   }
 }
@@ -508,24 +534,28 @@ void reconnectMQTT() {
 // =======================================================================================
 
 void createLog(int s, String l, bool tt) {
-  if (s != -1 && l != "-1") {
-    DateTime now = rtc.now();
+  if (s != -1 && l != "-1") {        // Check if slot and list are valid
+    DateTime now = rtc.now();        // Get current date and time from RTC
 
-    PillLog log;
+    // Create a new pill log entry
+    PillLog log;   
     log.date = String(now.day()) + "-" + String(now.month()) + "-" + String(now.year());
 
-    char buffer[6]; // HH:MM + \0
-    sprintf(buffer, "%02d:%02d", now.hour(), now.minute());
+    char buffer[6]; // HH:MM + null terminator
+    sprintf(buffer, "%02d:%02d", now.hour(), now.minute()); // Format time as HH:MM
     log.time = buffer;
-    log.slot = s;
-    log.list = l;
-    log.take = tt;
 
-    pillLogs.emplace_back(log);
+    log.slot = s;               // Save slot number
+    log.list = l;               // Save pill list/name
+    log.take = tt;              // Save whether pill was taken (true/false)
 
+    pillLogs.emplace_back(log); // Add log entry to pillLogs vector
+
+    // Reset current slot and list after logging
     currentList = "-1";
     currentSlot = -1;
 
+    // Debug: print the logged data
     Serial.println("createLog");
     Serial.println("DATA in LOG");
     Serial.print("Date : ");
@@ -541,28 +571,32 @@ void createLog(int s, String l, bool tt) {
   }
 }
 
-void sendLogBatch() {
-  if (!pillLogs.empty()) {
-    DynamicJsonDocument doc(8192);
-    JsonArray arr = doc.createNestedArray("log");
+void sendLogBatch() {                       
+  if (!pillLogs.empty()) {          // Check if there are any pill logs to send
+    DynamicJsonDocument doc(8192);              // Create a JSON document with 8KB capacity
+    JsonArray arr = doc.createNestedArray("log");       // Create a JSON array named "log"
 
+    // Loop through all pill logs and add them to JSON array
     for (size_t i = 0; i < pillLogs.size(); i++) {
         JsonObject obj = arr.createNestedObject();
-        obj["date"] = pillLogs[i].date;
-        obj["time"] = pillLogs[i].time;
-        obj["slot"] = pillLogs[i].slot;
-        obj["list"] = pillLogs[i].list;
-        obj["take"] = pillLogs[i].take;
+        obj["date"] = pillLogs[i].date;    // Log date
+        obj["time"] = pillLogs[i].time;    // Log time
+        obj["slot"] = pillLogs[i].slot;    // Log slot number
+        obj["list"] = pillLogs[i].list;    // Log pill list/name
+        obj["take"] = pillLogs[i].take;    // Log whether pill was taken
     }
-
+    
+    // Serialize JSON document to a string
     String Buff;
     serializeJson(doc, Buff);
+
+    // Publish JSON string to MQTT topic
     client.publish(SEND_LOG, Buff.c_str(), true);
 
-    pillLogs.clear();
+    pillLogs.clear();  // Clear logs after sending
     Serial.println("sendLogBatch");
-    Serial.println(String("JSON ") + Buff.c_str());
-  }
+    Serial.println(String("JSON ") + Buff.c_str());  // Debug: print JSON content
+  } 
 }
 
 // =======================================================================================
@@ -570,27 +604,30 @@ void sendLogBatch() {
 // =======================================================================================
 
 void checkTimes() {
-  DateTime now = rtc.now();
+  DateTime now = rtc.now();  // Get current date and time from RTC
 
+  // ===== Reset triggers once per day at 00:01 =====
   static bool resetDone = false;
   if (!resetDone && now.hour() == 0 && now.minute() == 1) {
       for (size_t i = 0; i < Slot_times.size(); i++) {
-          Slot_times[i].triger = false;
+          Slot_times[i].triger = false;    // Reset all triggers for the new day
       }
-      saveTimes();
-      resetDone = true; 
+
+      saveTimes();              // Save updated triggers to Preferences
+      resetDone = true;         // Ensure reset happens only once
   } 
   
   if (now.hour() != 0 || now.minute() != 1) {
-      resetDone = false; 
+      resetDone = false;    // Allow reset again on next day
   }
 
+  // ===== Check each pill slot to see if it's time to alert =====
   for (size_t i = 0; i < Slot_times.size(); i++) {
     String time = Slot_times[i].time;
     int slot = Slot_times[i].slot;
 
-    int h = time.substring(0, 2).toInt();
-    int m = time.substring(3, 5).toInt();
+    int h = time.substring(0, 2).toInt();  // Extract hour
+    int m = time.substring(3, 5).toInt();  // Extract minute
 
     // Debug
     // Serial.print("now.hour() == ");
@@ -610,20 +647,22 @@ void checkTimes() {
     //   Serial.println(m);
     // }
 
+    // If this slot hasn't been triggered yet and the time has passed
     if (!Slot_times[i].triger && (now.hour() > h || (now.hour() == h && now.minute() >= m))) {
-      Slot_times[i].triger = true;
-      handleServo(90);
+      Slot_times[i].triger = true;     // Mark as triggered
+      handleServo(90);                 // Move servo to dispense pill
 
-      pillStartTime = millis();
-      handlePilling = true;
+      pillStartTime = millis();     // Start pill alert timer
+      handlePilling = true;         // Activate pill alert process
+ 
+      currentTime = Slot_times[i].time; // Store current time
 
-      currentTime = Slot_times[i].time;
+      saveTimes();  // Save updated triggers
 
-      saveTimes();
-
-      currentList = Slot_times[i].list;
-      currentSlot = Slot_times[i].slot;
-
+      currentList = Slot_times[i].list;  // Store current pill list
+      currentSlot = Slot_times[i].slot;  // Store current slot
+      
+      // Debug: print current schedule and trigger states
       Serial.println("Found time");
       for (int i = 0; i < Slot_times.size(); i++) {
         Serial.print(Slot_times[i].slot);
@@ -635,37 +674,39 @@ void checkTimes() {
         Serial.println(Slot_times[i].triger ? "triger" : "No");
       }
 
-      break;
+      break; // Stop checking after finding the first matching slot
     }
   }
 }
 
 void stopPillAlert(bool taken) {
-  handlePilling = false;
-  digitalWrite(LEDRED, LOW);
-  digitalWrite(BUZZER, HIGH);
-  ledState = false;
-  buzzerState = true;
+  handlePilling = false;        // Stop pill alert process
+
+  digitalWrite(LEDRED, LOW);     // Turn off LED
+  digitalWrite(BUZZER, HIGH);    // Set buzzer HIGH (could indicate stop state)
+  ledState = false;              // Update internal LED state
+  buzzerState = true;            // Update internal buzzer state
 
   Serial.println("stopPillAlert");
 
-  ShowMsg(taken);
-  
+  ShowMsg(taken);  // Display message on screen or interface (e.g., pill taken or missed)
 }
 
 void updatePill() {
-  if (handlePilling) {
+  if (handlePilling) {     // Check if pill handling is active
     unsigned long now = millis();
 
+    // ===== Blink LED and buzzer at regular interval =====
     if (now - lastBlinkTime >= BLINK_INTERVAL) {
-      lastBlinkTime = now;
-      ledState = !ledState;
-      buzzerState = !buzzerState;
+      lastBlinkTime = now;              // Update last blink time
+      ledState = !ledState;             // Toggle LED state
+      buzzerState = !buzzerState;       // Toggle buzzer state
 
-      digitalWrite(LEDRED, ledState);
-      digitalWrite(BUZZER, buzzerState ? HIGH : LOW);
+      digitalWrite(LEDRED, ledState);                     // Update LED
+      digitalWrite(BUZZER, buzzerState ? HIGH : LOW);     // Update buzzer
     }
 
+    // ===== Check if pill alert duration has expired =====
     if (now - pillStartTime >= PILL_DURATION) {
       stopPillAlert(false);
       createLog(currentSlot, currentList, false);
@@ -674,19 +715,21 @@ void updatePill() {
       Serial.println("Pill Failed");
     }
 
+    // ===== Check for button press (user confirmed pill taken) =====
     bool currentState = digitalRead(SW); 
-    static unsigned long lastDebounceTime = 0; 
+    static unsigned long lastDebounceTime = 0; // Debounce timer
+
     if(lastButtonState == HIGH && currentState == LOW && millis() - lastDebounceTime > 100){ 
-      stopPillAlert(true); 
-      createLog(currentSlot, currentList, true); 
-      handleServo(0); 
+      stopPillAlert(true);                          // Stop alert (success)
+      createLog(currentSlot, currentList, true);    // Log as taken
+      handleServo(0);                               // Reset servo
 
       lastDebounceTime = millis(); 
       
       Serial.println("Button toggle"); 
     } 
     
-    lastButtonState = currentState; 
+    lastButtonState = currentState;  // Save current button state for next loop
   }
 }
 
@@ -695,11 +738,14 @@ void updatePill() {
 // =======================================================================================
 
 void handleServo(int angle) {
-  myServo.write(angle);
+  myServo.write(angle);   // Move the servo to the specified angle (0-180 degrees)
 
+  // Debug: print the angle to Serial Monitor
   Serial.print("Servo : ");
   Serial.print(angle);
   Serial.println(" Degree");
+
+  // Confirmation message
   Serial.println("Servo Success");
 }
 
@@ -708,16 +754,20 @@ void handleServo(int angle) {
 // =======================================================================================
 
 void saveTimes() {
-  PREFS.begin("pill-time", false);
+  PREFS.begin("pill-time", false);  // Open Preferences namespace "pill-time" in read/write mode
   PREFS.clear();
   
-  PREFS.putInt("Size", Slot_times.size());
+  PREFS.putInt("Size", Slot_times.size());  // Save the number of slots
+
+  // Loop through all slots
   for (size_t i = 0; i < Slot_times.size(); i++) {
+    // Build keys for each data field
     String keyTime = "T" + String(i);
     String keyList = "L" + String(i);
     String keySlot = "S" + String(i);
     String keyTriger = "TG" + String(i);
 
+    // Save slot data to Preferences
     PREFS.putString(keyTime.c_str(), Slot_times[i].time);
     PREFS.putString(keyList.c_str(), Slot_times[i].list);
     PREFS.putInt(keySlot.c_str(), Slot_times[i].slot);
@@ -730,38 +780,45 @@ void saveTimes() {
 }
 
 void loadTimes() {
-  PREFS.begin("pill-time", true);
-  Slot_times.clear();
+  PREFS.begin("pill-time", true);  // Open Preferences namespace "pill-time" in read-only mode
+  Slot_times.clear();              // Clear current slot schedule
 
   int size = PREFS.getInt("Size", 0);
   DateTime now = rtc.now();  
 
+  // Loop through all saved slots
   for (size_t i = 0; i < size; i++) {
+    // Build keys for each data field
     String keyTime = "T" + String(i);
     String keyList = "L" + String(i);
     String keySlot = "S" + String(i);
     String keyTriger = "TG" + String(i);
 
-    PillTime p;
+    PillTime p;  // Create a temporary PillTime object
+
+    // Load values from Preferences, with default values if not found
     p.time = PREFS.getString(keyTime.c_str(), "");
     p.list = PREFS.getString(keyList.c_str(), "");
     p.slot = PREFS.getInt(keySlot.c_str(), 0);
 
+    // Load trigger status; "1" = true, otherwise false
     String trig = PREFS.getString(keyTriger.c_str(), "0");
     p.triger = (trig == "1");
 
-    
+    // Check if the pill time has already passed
     int h = p.time.substring(0,2).toInt();
     int m = p.time.substring(3,5).toInt();
     if (now.hour() > h || (now.hour() == h && now.minute() >= m)) {
-      p.triger = true;
+      p.triger = true;  // Mark as triggered if time already passed
     }
 
+    // Add loaded slot to schedule
     Slot_times.emplace_back(p);
   }
 
-  PREFS.end();
+  PREFS.end(); // Close Preferences
 
+  // Debug: print loaded schedule
   Serial.println("loadTimes Success");
   for (int i = 0; i < Slot_times.size(); i++) {
     Serial.print("Slot -> ");
@@ -799,7 +856,8 @@ void callback(char* topic, byte* payload, unsigned int length) {
     return;
   }
 
-  if (String(topic) == REQUEST_ADD_TIME) {
+  // Check if the MQTT topic is for adding pill times
+  if (String(topic) == REQUEST_ADD_TIME) { 
     Slot_times.clear();
     JsonArray arr = doc.as<JsonArray>();
 
@@ -810,14 +868,18 @@ void callback(char* topic, byte* payload, unsigned int length) {
         break;
       }
 
+      // Extract time, pill list, and slot number from JSON object
       String time = obj["time"].as<String>();
       String list = obj["list"].as<String>();
       int slot = obj["slot"].as<int>();
+
+      // Add new pill time to the schedule, trigger initially false
       Slot_times.emplace_back(time, list, slot, false);
 
       count++;
     }
 
+    // Sort the schedule by time (hours first, then minutes)
     std::sort(Slot_times.begin(), Slot_times.end(), [](const PillTime &a, const PillTime &b) {
       int ah = a.time.substring(0, 2).toInt();
       int am = a.time.substring(3, 5).toInt();
@@ -829,8 +891,9 @@ void callback(char* topic, byte* payload, unsigned int length) {
       return ah < bh;
     });
 
-    saveTimes();
+    saveTimes(); // Save the updated schedule (e.g., to EEPROM)
 
+    // Print the current schedule to Serial Monitor
     Serial.println("Current schedule:");
     for (int i = 0; i < Slot_times.size(); i++) {
       Serial.printf("Slot %d) %s -> %s ", Slot_times[i].slot, Slot_times[i].list.c_str(), Slot_times[i].time.c_str());
@@ -883,8 +946,8 @@ void setup() {
   connectWiFi();   // Connect to WiFi
 
   // ===== Create Tasks =====
-  xTaskCreatePinnedToCore(TaskWiFi, "WiFiTask", 4096, NULL, 1, &TaskWiFiHandle, 0);
-  xTaskCreatePinnedToCore(TaskPill, "PillTask", 8192, NULL, 1, &TaskPillHandle, 1);
+  xTaskCreatePinnedToCore(TaskWiFi, "WiFiTask", 4096, NULL, 1, &TaskWiFiHandle, 0); // Create WiFi task pinned to core 0, stack size 4096, priority 1
+  xTaskCreatePinnedToCore(TaskPill, "PillTask", 8192, NULL, 1, &TaskPillHandle, 1); // Create Pill task pinned to core 1, stack size 8192, priority 1
 }
 
 // =======================================================================================
