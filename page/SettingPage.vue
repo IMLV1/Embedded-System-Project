@@ -62,6 +62,13 @@ export default {
             }));
 
             this.send({ payload }); 
+        },
+        loadJson(payload) {
+            this.forms = payload.map((item, index) =>({
+                 time: item.time,
+                slot: item.slot,
+                list: item.list
+            }));
         }
     }
 };
