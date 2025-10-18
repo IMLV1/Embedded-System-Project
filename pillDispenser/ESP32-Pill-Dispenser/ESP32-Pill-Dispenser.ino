@@ -25,6 +25,7 @@
 #include <PubSubClient.h>  // MQTT client library
 #include <ArduinoJson.h>   // For parsing JSON
 #include <Preferences.h>   // Non-volatile storage (ESP32 flash)
+#include <esp_task_wdt.h>
 
 // ===== Standard C++ libraries =====
 #include <vector>     // To store pill slots
@@ -36,6 +37,7 @@
 #include <ESP32Servo.h>         // Servo control
 #include <LiquidCrystal_I2C.h>  // LCD 16x2 I2C
 
+#define WDT_TIMEOUT 60
 
 // ===== MQTT configuration =====
 #define MQTT_SERVER "192.168.1.118"   // MQTT broker IP
@@ -83,6 +85,13 @@ WiFiManager wm;
 LiquidCrystal_I2C lcd(0x27, 16, 2);  // LCD 16x2 I2C
 RTC_DS3231 rtc;                      // RTC Module
 Servo myServo;                       // Servo motor
+
+// ===== WatchDog Config =====
+esp_task_wdt_config_t twdt_config = { 
+    .timeout_ms = WDT_TIMEOUT * 1000,                     
+    .idle_core_mask = (1 << CONFIG_FREERTOS_NUMBER_OF_CORES) - 1, 
+    .trigger_panic = true                                
+};
 
 // ===== Task Handles =====
 TaskHandle_t TaskWiFiHandle;
@@ -209,6 +218,8 @@ void loadTimes();      // Load scheduled pill times from EEPROM
 
 void TaskWiFi(void *pvParameters){
   for(;;){  // Infinite loop for the FreeRTOS task 
+    esp_task_wdt_reset(); // Feed (reset) the watchdog for this task
+
     // ===== WiFi connection check =====
     if (!WiFi.isConnected()) {
       connectWiFi();       // Attempt to connect to WiFi using WiFiManager
@@ -243,6 +254,8 @@ void TaskWiFi(void *pvParameters){
 
 void TaskPill(void *pvParameters){
   for(;;){
+    esp_task_wdt_reset(); // Feed (reset) the watchdog for this task
+
     // ===== Pill handling & LCD =====
     checkTimes();    // Check if any pill should be dispensed
     updatePill();    // Update Status Pill 
@@ -910,6 +923,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
 void setup() {
   Serial.begin(115200);
 
+  Serial.println("Pill Dispenser Start");
+
+  // Initialize Watch Dog
+  esp_task_wdt_init(&twdt_config);             
+
   Wire.begin(SDA, SCL); // Initialize I2C
 
   // Pin Setup
@@ -948,6 +966,10 @@ void setup() {
   // ===== Create Tasks =====
   xTaskCreatePinnedToCore(TaskWiFi, "WiFiTask", 4096, NULL, 1, &TaskWiFiHandle, 0); // Create WiFi task pinned to core 0, stack size 4096, priority 1
   xTaskCreatePinnedToCore(TaskPill, "PillTask", 8192, NULL, 1, &TaskPillHandle, 1); // Create Pill task pinned to core 1, stack size 8192, priority 1
+
+  // ====== Add Tasks to the Watchdog ======
+  esp_task_wdt_add(TaskWiFiHandle);
+  esp_task_wdt_add(TaskPillHandle);
 }
 
 // =======================================================================================
