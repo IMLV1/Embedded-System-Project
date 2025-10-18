@@ -65,7 +65,7 @@ export default {
         },
         loadJson(payload) {
             this.forms = payload.map((item, index) =>({
-                 time: item.time,
+                time: item.time,
                 slot: item.slot,
                 list: item.list
             }));
