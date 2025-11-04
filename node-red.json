@@ -901,7 +901,7 @@
         "minPoolSize": "0",
         "maxPoolSize": "100",
         "maxIdleTimeMS": "0",
-        "uri": "mongodb+srv://kriangdetpiamchaeng_db_user:king2547@embed.alwx0x2.mongodb.net/",
+        "uri": "mongodb+srv://<username>:<password>@embed.alwx0x2.mongodb.net/",
         "advanced": "{}",
         "uriTabActive": "tab-uri-advanced"
     },
@@ -1229,7 +1229,7 @@
             "groupBorderRadius": "4px",
             "widgetGap": "12px"
         }
-    },
+    },        
     {
         "id": "e0fe5feb8992cf5b",
         "type": "ui-page",
