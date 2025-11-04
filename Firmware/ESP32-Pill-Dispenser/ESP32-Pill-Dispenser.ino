@@ -26,6 +26,7 @@
 #include <ArduinoJson.h>   // For parsing JSON
 #include <Preferences.h>   // Non-volatile storage (ESP32 flash)
 #include <esp_task_wdt.h>
+#include <EEPROM.h>
 
 // ===== Standard C++ libraries =====
 #include <vector>     // To store pill slots
@@ -36,11 +37,16 @@
 #include <RTClib.h>             // DS3231 RTC Module
 #include <ESP32Servo.h>         // Servo control
 #include <LiquidCrystal_I2C.h>  // LCD 16x2 I2C
+#include <AccelStepper.h>
+
+// --- EEPROM ---
+#define EEPROM_ADDR_SLOT 0
+
 
 #define WDT_TIMEOUT 60
 
 // ===== MQTT configuration =====
-#define MQTT_SERVER "192.168.1.118"   // MQTT broker IP
+#define MQTT_SERVER "20.244.31.58"   // MQTT broker IP
 #define MQTT_PORT 1883
 #define MQTT_MAX_PACKET_SIZE 1024
 #define REQUEST_ADD_TIME "esp32/add"  // Topic to receive pill times (JSON)
@@ -76,6 +82,7 @@
 #define BLINK_INTERVAL 200               // BLINK 200ms
 
 // ===== Global objects =====
+AccelStepper stepper(AccelStepper::HALF4WIRE, B1, B3, B2, B4);
 WiFiClient espClient;            // TCP client used by MQTT
 PubSubClient client(espClient);  // MQTT client using espClient
 Preferences PREFS;               // ESP32 flash storage
@@ -185,6 +192,15 @@ unsigned long lastMQTTAttempt = 0;
 const unsigned long WIFI_RETRY_INTERVAL = 30000UL; 
 bool wmStarted = false;
 
+// --- Motor Parameters ---
+const int stepsPerSlot = 1920 * 2; // 3840 steps ต่อ 1 ช่อง
+const int totalSlots = 8;
+
+// --- Motor State ---
+int motorSlot = 1;
+int targetSlot = -1;      // slot ที่กำลังจะหมุน
+bool motorMoving = false; // สถานะมอเตอร์
+
 // ===== RTC & LCD =====
 void setupRTC_Module();          // Initialize and start the RTC module
 void setupLCD_Moddule();         // Initialize and start the 16x2 LCD
@@ -212,11 +228,17 @@ void handleServo(int angle);     // Rotate servo motor to the specified angle
 void saveTimes();      // Save scheduled pill times to EEPROM
 void loadTimes();      // Load scheduled pill times from EEPROM
 
+// ===== ULN2003A + 28BYJ-48 =====
+void moveToSlot(int slot);
+void handleMotor();
+
 // =======================================================================================
 //                                    Task 1: WiFi + MQTT
 // =======================================================================================
 
 void TaskWiFi(void *pvParameters){
+  esp_task_wdt_add(NULL);
+
   for(;;){  // Infinite loop for the FreeRTOS task 
     esp_task_wdt_reset(); // Feed (reset) the watchdog for this task
 
@@ -243,29 +265,41 @@ void TaskWiFi(void *pvParameters){
     // Serial.print("WiFi Task Stack Free: ");
     // Serial.println(uxTaskGetStackHighWaterMark(NULL));
 
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
   }
 }
 
 
-// =======================================================================================
-//                                    Task : Pill handle
-// =======================================================================================
+// // =======================================================================================
+// //                                    Task : Pill handle
+// // =======================================================================================
 
 void TaskPill(void *pvParameters){
+  esp_task_wdt_add(NULL);
+
   for(;;){
     esp_task_wdt_reset(); // Feed (reset) the watchdog for this task
+    handleMotor();
+    // // ===== Pill handling & LCD =====
+    // checkTimes();    // Check if any pill should be dispensed
+    // updatePill();    // Update Status Pill 
+    // waitPillLcd();   // Always update LCD
 
-    // ===== Pill handling & LCD =====
-    checkTimes();    // Check if any pill should be dispensed
-    updatePill();    // Update Status Pill 
-    waitPillLcd();   // Always update LCD
+    // stepper.run();
+
+    // if(stepper.distanceToGo() == 0 && motorSlot != targetSlot){
+    //   motorSlot = targetSlot;
+    //   EEPROM.write(EEPROM_ADDR_SLOT, motorSlot);
+    //   EEPROM.commit();
+    //   Serial.print("Motor reached slot ");
+    //   Serial.println(motorSlot);
+    // }
 
     // ===== Stack check =====
     // Serial.print("Pill Task Stack Free: ");
     // Serial.println(uxTaskGetStackHighWaterMark(NULL));
 
-    vTaskDelay(5 / portTICK_PERIOD_MS);
+    vTaskDelay(1 / portTICK_PERIOD_MS);
   }
 }
 
@@ -280,7 +314,7 @@ void setupRTC_Module() {
     // ESP.restart();
   }
 
-  rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));  // Set RTC to compile time
+  // rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));  // Set RTC to compile time
   Serial.println("setupRTC_Module");
 
   DateTime now = rtc.now();
@@ -635,59 +669,61 @@ void checkTimes() {
   }
 
   // ===== Check each pill slot to see if it's time to alert =====
-  for (size_t i = 0; i < Slot_times.size(); i++) {
-    String time = Slot_times[i].time;
-    int slot = Slot_times[i].slot;
+  if (!motorMoving) {
+     for (size_t i = 0; i < Slot_times.size(); i++) {
+      String time = Slot_times[i].time;
+      int slot = Slot_times[i].slot;
 
-    int h = time.substring(0, 2).toInt();  // Extract hour
-    int m = time.substring(3, 5).toInt();  // Extract minute
+      int h = time.substring(0, 2).toInt();  // Extract hour
+      int m = time.substring(3, 5).toInt();  // Extract minute
 
-    // Debug
-    // Serial.print("now.hour() == ");
-    // Serial.print(now.hour());
-    // Serial.print(" && h == ");
-    // Serial.print(h);
-    // Serial.print(" && now.minute() == ");
-    // Serial.println(now.minute());
+      // Debug
+      // Serial.print("now.hour() == ");
+      // Serial.print(now.hour());
+      // Serial.print(" && h == ");
+      // Serial.print(h);
+      // Serial.print(" && now.minute() == ");
+      // Serial.println(now.minute());
 
-    // if (!handlePilling) {
-    //   Serial.print(now.hour());
-    //   Serial.print(" == ");
-    //   Serial.print(h);
-    //   Serial.print(" | ");
-    //   Serial.print(now.minute());
-    //   Serial.print(" == ");
-    //   Serial.println(m);
-    // }
+      // if (!handlePilling) {
+      //   Serial.print(now.hour());
+      //   Serial.print(" == ");
+      //   Serial.print(h);
+      //   Serial.print(" | ");
+      //   Serial.print(now.minute());
+      //   Serial.print(" == ");
+      //   Serial.println(m);
+      // }
 
-    // If this slot hasn't been triggered yet and the time has passed
-    if (!Slot_times[i].triger && (now.hour() > h || (now.hour() == h && now.minute() >= m))) {
-      Slot_times[i].triger = true;     // Mark as triggered
-      handleServo(90);                 // Move servo to dispense pill
+      // If this slot hasn't been triggered yet and the time has passed
+      if (!Slot_times[i].triger && (now.hour() > h || (now.hour() == h && now.minute() >= m))) {
+        Slot_times[i].triger = true;     // Mark as triggered
+        handleServo(48);                 // Move servo to dispense pill
 
-      pillStartTime = millis();     // Start pill alert timer
-      handlePilling = true;         // Activate pill alert process
- 
-      currentTime = Slot_times[i].time; // Store current time
+        pillStartTime = millis();     // Start pill alert timer
+        handlePilling = true;         // Activate pill alert process
+        
+        targetSlot = slot;  
+        motorMoving = true; 
 
-      saveTimes();  // Save updated triggers
+        currentTime = Slot_times[i].time; // Store current time
+        currentList = Slot_times[i].list;  // Store current pill list
+        currentSlot = Slot_times[i].slot;  // Store current slot
 
-      currentList = Slot_times[i].list;  // Store current pill list
-      currentSlot = Slot_times[i].slot;  // Store current slot
-      
-      // Debug: print current schedule and trigger states
-      Serial.println("Found time");
-      for (int i = 0; i < Slot_times.size(); i++) {
-        Serial.print(Slot_times[i].slot);
-        Serial.print("). ");
-        Serial.print(Slot_times[i].list);
-        Serial.print(" Time = ");
-        Serial.print(Slot_times[i].time);
-        Serial.print(" -> ");
-        Serial.println(Slot_times[i].triger ? "triger" : "No");
+        // Debug: print current schedule and trigger states
+        // Serial.println("Found time");
+        // for (int i = 0; i < Slot_times.size(); i++) {
+        //   Serial.print(Slot_times[i].slot);
+        //   Serial.print("). ");
+        //   Serial.print(Slot_times[i].list);
+        //   Serial.print(" Time = ");
+        //   Serial.print(Slot_times[i].time);
+        //   Serial.print(" -> ");
+        //   Serial.println(Slot_times[i].triger ? "triger" : "No");
+        // }
+
+         break; // Stop checking after finding the first matching slot
       }
-
-      break; // Stop checking after finding the first matching slot
     }
   }
 }
@@ -732,7 +768,7 @@ void updatePill() {
     bool currentState = digitalRead(SW); 
     static unsigned long lastDebounceTime = 0; // Debounce timer
 
-    if(lastButtonState == HIGH && currentState == LOW && millis() - lastDebounceTime > 100){ 
+    if(lastButtonState == HIGH && currentState == LOW && millis() - lastDebounceTime > 50){ 
       stopPillAlert(true);                          // Stop alert (success)
       createLog(currentSlot, currentList, true);    // Log as taken
       handleServo(0);                               // Reset servo
@@ -760,6 +796,60 @@ void handleServo(int angle) {
 
   // Confirmation message
   Serial.println("Servo Success");
+}
+
+// =======================================================================================
+//                                      ULN2003A + 28BYJ-48
+// =======================================================================================
+
+void handleMotor() {
+  static bool moveStarted = false;
+
+  if (motorMoving && targetSlot >= 0) {
+    if (!moveStarted) {
+      moveToSlot(targetSlot);
+      moveStarted = true;
+    }
+
+    if (stepper.distanceToGo() != 0) {
+      stepper.run();
+    } else {
+      motorMoving = false;
+      motorSlot = targetSlot;
+      EEPROM.write(EEPROM_ADDR_SLOT, motorSlot);
+      EEPROM.commit();
+
+      saveTimes();  // Save updated triggers
+
+      stepper.disableOutputs();  
+
+      Serial.print("Motor reached slot ");
+      Serial.println(motorSlot);
+      targetSlot = -1;
+      moveStarted = false;
+    }
+  }
+}
+
+
+
+void moveToSlot(int slot) {
+  if (!handlePilling) return;
+  if(slot < 1 || slot > totalSlots) return;
+
+  int diff = (slot - motorSlot + totalSlots) % totalSlots;
+  if(diff > totalSlots / 2) diff -= totalSlots; // shortest path (CCW)
+
+  long moveSteps = diff * stepsPerSlot;
+  stepper.move(moveSteps);
+  targetSlot = slot;
+
+  Serial.print("Moving from slot ");
+  Serial.print(motorSlot);
+  Serial.print(" -> slot ");
+  Serial.print(targetSlot);
+  Serial.print(" | steps = ");
+  Serial.println(moveSteps);
 }
 
 // =======================================================================================
@@ -941,6 +1031,21 @@ void setup() {
   pinMode(B3, OUTPUT);
   pinMode(B4, OUTPUT);
 
+  EEPROM.begin(512);
+
+  int savedSlot = EEPROM.read(EEPROM_ADDR_SLOT);
+  if (savedSlot >= 1 && savedSlot <= totalSlots) {
+    motorSlot = savedSlot;
+  } else {
+    motorSlot = 1;
+  }
+
+  Serial.print("Start motorSlot = ");
+  Serial.println(motorSlot);
+
+  stepper.setMaxSpeed(1500);    // steps per second
+  stepper.setAcceleration(1000); // steps per second^2
+
   digitalWrite(BUZZER, HIGH);
   digitalWrite(LEDRED, LOW);
 
@@ -965,11 +1070,12 @@ void setup() {
 
   // ===== Create Tasks =====
   xTaskCreatePinnedToCore(TaskWiFi, "WiFiTask", 4096, NULL, 1, &TaskWiFiHandle, 0); // Create WiFi task pinned to core 0, stack size 4096, priority 1
-  xTaskCreatePinnedToCore(TaskPill, "PillTask", 8192, NULL, 1, &TaskPillHandle, 1); // Create Pill task pinned to core 1, stack size 8192, priority 1
+  xTaskCreatePinnedToCore(TaskPill, "PillTask", 2048, NULL, 1, &TaskPillHandle, 1); // Create Pill task pinned to core 1, stack size 2048, priority 1
 
   // ====== Add Tasks to the Watchdog ======
   esp_task_wdt_add(TaskWiFiHandle);
   esp_task_wdt_add(TaskPillHandle);
+  esp_task_wdt_add(NULL);
 }
 
 // =======================================================================================
@@ -977,5 +1083,12 @@ void setup() {
 // =======================================================================================
 
 void loop() {
+  esp_task_wdt_reset(); // Feed (reset) the watchdog for this task
+
+  // ===== Pill handling & LCD =====
+  checkTimes();    // Check if any pill should be dispensed
+
+  updatePill();    // Update Status Pill 
+  waitPillLcd();   // Always update LCD 
   
 }
