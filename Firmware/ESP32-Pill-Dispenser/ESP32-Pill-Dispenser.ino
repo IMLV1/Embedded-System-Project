@@ -46,8 +46,8 @@
 #define WDT_TIMEOUT 60
 
 // ===== MQTT configuration =====
-#define MQTT_SERVER "20.244.31.58"   // MQTT broker IP
-#define MQTT_PORT 1883
+#define MQTT_SERVER "<IP-MQTT>"   // MQTT broker IP
+#define MQTT_PORT <PORT>
 #define MQTT_MAX_PACKET_SIZE 1024
 #define REQUEST_ADD_TIME "esp32/add"  // Topic to receive pill times (JSON)
 #define SEND_STATUS "esp32/status"    // Topic to check online/offline
