@@ -1,0 +1,1278 @@
+[
+    {
+        "id": "9fa41ae47307f8da",
+        "type": "tab",
+        "label": "Flow frame",
+        "disabled": false,
+        "info": "",
+        "env": []
+    },
+    {
+        "id": "fd7cc4fda0f13e7a",
+        "type": "function",
+        "z": "9fa41ae47307f8da",
+        "name": "function 3",
+        "func": "function toMillis(t) {\n  if (/^\\d{2}:\\d{2}$/.test(t)) {\n    const [h, m] = t.split(\":\").map(Number);\n    const d = new Date();\n    d.setHours(h, m, 0, 0);\n    return d.getTime();\n  }\n  return Date.parse(t) || Date.now();\n}\n\nlet data = msg.payload;\n\n// 🧩 ถ้า MQTT ส่งมาทีละค่า เช่น {time:\"...\", heartRate:\"80\"}\nif (data && data.heartRate !== undefined) {\n  // แปลง heartRate ให้เป็นตัวเลขเสมอ\n  data.heartRate = Number(data.heartRate);\n  let logs = flow.get(\"heartLogs\") || [];\n  logs.push(data);\n  if (logs.length > 10) logs.shift();\n  flow.set(\"heartLogs\", logs);\n  data = { heartrate: logs };\n}\n\n// ❗ ถ้าไม่มี array heartrate\nif (!data || !Array.isArray(data.heartrate)) {\n  node.warn(\"ไม่มีข้อมูล heartrate\");\n  return null;\n}\n\n// ✅ ล้างกราฟก่อน\nlet clearMsg = { ui_control: { clear: true } };\n\n// ✅ จุดล่าสุด\nlet last = data.heartrate[data.heartrate.length - 1];\nlet chartMsg = {\n  topic: \"BPM\",\n  payload: {\n    x: toMillis(last.time),\n    y: Number(last.heartRate),\n  },\n};\n\n// ✅ คำนวณ avg/min/max ให้แน่ใจว่าเป็นตัวเลข\nconst hrValues = data.heartrate.map(p => Number(p.heartRate)).filter(v => !isNaN(v));\n\nlet avg = 0, minVal = 0, maxVal = 0;\nif (hrValues.length > 0) {\n  avg = hrValues.reduce((a, b) => a + b, 0) / hrValues.length;\n  minVal = Math.min(...hrValues);\n  maxVal = Math.max(...hrValues);\n}\n\n// ✅ ส่งออก 2 ทาง\nreturn [\n  [clearMsg, chartMsg],\n  { payload: { avg, minVal, maxVal, heartrate: data.heartrate } },\n];\n",
+        "outputs": 2,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 960,
+        "y": 1560,
+        "wires": [
+            [
+                "242197cb402c19c0"
+            ],
+            [
+                "81567a04bff56f50"
+            ]
+        ]
+    },
+    {
+        "id": "831558dccc9ef186",
+        "type": "debug",
+        "z": "9fa41ae47307f8da",
+        "name": "debug 5",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 860,
+        "y": 2160,
+        "wires": []
+    },
+    {
+        "id": "9957162394bd3265",
+        "type": "function",
+        "z": "9fa41ae47307f8da",
+        "name": "function 4",
+        "func": "\nconst now = new Date();\nconst d = String(now.getDate()).padStart(2, \"0\");\nconst m = String(now.getMonth() + 1).padStart(2, \"0\");\nconst y = String(now.getFullYear());\nconst today = `${d}-${m}-${y}`;\n\nconst data = msg.payload;\n\nif (data && Array.isArray(data.log)) {\n    const convertYear = (year) => (year > 2500 ? year - 543 : year);\n\n    const todayLogs = data.log.filter(l => {\n        if (!l.date) return false;\n        const [day, month, year] = l.date.split('-').map(Number);\n        const gregorianYear = convertYear(year);\n\n        const logDateStr = `${String(day).padStart(2, '0')}-${String(month).padStart(2, '0')}-${gregorianYear}`;\n        return logDateStr === today;\n    });\n\n    msg.payload = { log: todayLogs };\n} else {\n    msg.payload = { log: [] };\n}\n\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1080,
+        "y": 1840,
+        "wires": [
+            [
+                "cddca1512a9b0d25",
+                "3453642594a303a4"
+            ]
+        ]
+    },
+    {
+        "id": "3453642594a303a4",
+        "type": "debug",
+        "z": "9fa41ae47307f8da",
+        "name": "debug 6",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1260,
+        "y": 1900,
+        "wires": []
+    },
+    {
+        "id": "1136410a2bc9fe6d",
+        "type": "mqtt out",
+        "z": "9fa41ae47307f8da",
+        "name": "",
+        "topic": "esp32/add",
+        "qos": "",
+        "retain": "",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "2c8b4e692cea257f",
+        "x": 1050,
+        "y": 2300,
+        "wires": []
+    },
+    {
+        "id": "e956df3b848f9f8f",
+        "type": "debug",
+        "z": "9fa41ae47307f8da",
+        "name": "DB/Add",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1040,
+        "y": 2360,
+        "wires": []
+    },
+    {
+        "id": "f3afaf9fb9cb6975",
+        "type": "mqtt in",
+        "z": "9fa41ae47307f8da",
+        "name": "",
+        "topic": "esp32/status",
+        "qos": "2",
+        "datatype": "auto-detect",
+        "broker": "2c8b4e692cea257f",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 570,
+        "y": 2320,
+        "wires": [
+            [
+                "39b13b92f9783c94"
+            ]
+        ]
+    },
+    {
+        "id": "39b13b92f9783c94",
+        "type": "debug",
+        "z": "9fa41ae47307f8da",
+        "name": "debug 8",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 560,
+        "y": 2380,
+        "wires": []
+    },
+    {
+        "id": "89e2812da241518a",
+        "type": "mqtt in",
+        "z": "9fa41ae47307f8da",
+        "name": "",
+        "topic": "esp32/log",
+        "qos": "2",
+        "datatype": "auto-detect",
+        "broker": "2c8b4e692cea257f",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 760,
+        "y": 2480,
+        "wires": [
+            [
+                "d1a6947f23e906ca",
+                "f8a0d1083e305a76"
+            ]
+        ]
+    },
+    {
+        "id": "d1a6947f23e906ca",
+        "type": "debug",
+        "z": "9fa41ae47307f8da",
+        "name": "debug 9",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1040,
+        "y": 2480,
+        "wires": []
+    },
+    {
+        "id": "f4fdcd7e1309ed05",
+        "type": "function",
+        "z": "9fa41ae47307f8da",
+        "name": "function 1",
+        "func": "// 🟢 ข้อมูลเข้า msg.payload = user object\nlet user = msg.payload;\n\n// ถ้าไม่มี log ให้หยุด\nif (!user || !Array.isArray(user.log)) {\n  node.warn(\"ไม่มีข้อมูล log\");\n  return [null]; // ✅ ต้อง return array เสมอ\n}\n\n// 🧩 แปลง log เป็น format ที่ UI ใช้\nconst history = user.log.map(item => ({\n  date: item.date,\n  time: item.time,\n  slot: \"Slot \" + item.slot,\n  name: item.list,\n  status: item.take ? \"Taken\" : \"Missed\"\n}));\n\n// 🧮 นับจำนวนแต่ละสถานะ\nconst takenCount = history.filter(h => h.status === \"Taken\").length;\nconst missedCount = history.filter(h => h.status === \"Missed\").length;\n\n// ถ้ามีข้อมูลใน schedule ที่ยังไม่เกิดขึ้น → Pending\nconst scheduleCount = Array.isArray(user.schedule) ? user.schedule.length : 0;\nconst pendingCount = Math.max(scheduleCount - (takenCount + missedCount), 0);\n\n// 💯 รวมเป็นเปอร์เซ็นต์\nconst total = takenCount + missedCount + pendingCount || 1;\nconst toPercent = v => Math.round((v / total) * 100);\n\nconst stats = {\n  taken: toPercent(takenCount),\n  missed: toPercent(missedCount),\n  pending: toPercent(pendingCount)\n};\n\n// 🟢 รวมออกเป็น payload ที่ UI ต้องใช้\nmsg.payload = {\n  history,\n  stats\n};\n\n// ✅ ต้อง return [msg] ไม่ใช่ msg เดี่ยว ๆ\nreturn [msg];\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1060,
+        "y": 1680,
+        "wires": [
+            [
+                "81536fda93487240",
+                "d1c785a64d097b23"
+            ]
+        ]
+    },
+    {
+        "id": "d1c785a64d097b23",
+        "type": "debug",
+        "z": "9fa41ae47307f8da",
+        "name": "debug 3",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1310,
+        "y": 1740,
+        "wires": []
+    },
+    {
+        "id": "9788c6c0ad203f47",
+        "type": "inject",
+        "z": "9fa41ae47307f8da",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"email\":\"teetat.pit@ku.th\",\"password\":\"GoodEiei1234\",\"name\":\"teetat\",\"surname\":\"Pitanupong\",\"age\":\"21\",\"schedule\":[{\"time\":\"00:11\",\"slot\":1,\"list\":\"asdasds\"},{\"time\":\"01:12\",\"slot\":2,\"list\":\"asdasd\"}],\"heartrate\":[{\"time\":\"12:00\",\"rate\":\"60\"},{\"time\":\"12:30\",\"rate\":\"67\"},{\"time\":\"13:00\",\"rate\":\"80\"},{\"time\":\"13:30\",\"rate\":\"70\"},{\"time\":\"14:00\",\"rate\":\"85\"},{\"time\":\"14:30\",\"rate\":\"90\"}],\"contact\":[{\"name\":\"teetat\",\"phone\":\"0986715382\",\"relation\":\"doctor\"},{\"doctor\":\"king\",\"phone\":\"092382332\"}],\"log\":[{\"date\":\"31-01-2547\",\"time\":\"12:12\",\"slot\":\"1\",\"list\":\"asdasd\",\"take\":true},{\"date\":\"31-01-2547\",\"time\":\"12:00\",\"slot\":\"2\",\"list\":\"asdasdsad\",\"take\":false},{\"date\":\"04-11-2568\",\"time\":\"12:00\",\"slot\":\"2\",\"list\":\"asdasdsad\",\"take\":false}]}",
+        "payloadType": "json",
+        "x": 910,
+        "y": 1780,
+        "wires": [
+            [
+                "f4fdcd7e1309ed05",
+                "9957162394bd3265"
+            ]
+        ]
+    },
+    {
+        "id": "8a078e3bacea2218",
+        "type": "inject",
+        "z": "9fa41ae47307f8da",
+        "name": "Send Alerts 1",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "{\"payload\":{\"alerts\":[{\"time\":\"08:05\",\"title\":\"Missed Medication\",\"message\":\"Vitamin D missed\",\"type\":\"Critical\",\"read\":false},{\"time\":\"12:10\",\"title\":\"Medication Taken\",\"message\":\"Blood Pressure Pill taken successfully\",\"type\":\"Success\",\"read\":false},{\"time\":\"18:00\",\"title\":\"Low Stock Warning\",\"message\":\"Omega-3 almost empty\",\"type\":\"Critical\",\"read\":true},{\"time\":\"20:00\",\"title\":\"Low Stock Warning\",\"message\":\"NATCPE-3 almost empty\",\"type\":\"Critical\",\"read\":true}]}}",
+        "payloadType": "json",
+        "x": 830,
+        "y": 1960,
+        "wires": [
+            [
+                "ae7154b23557485a",
+                "37b74eba0574eaf5"
+            ]
+        ]
+    },
+    {
+        "id": "ae7154b23557485a",
+        "type": "debug",
+        "z": "9fa41ae47307f8da",
+        "name": "debug 5",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1060,
+        "y": 1980,
+        "wires": []
+    },
+    {
+        "id": "154c7a18d3ccc7e8",
+        "type": "mqtt in",
+        "z": "9fa41ae47307f8da",
+        "name": "",
+        "topic": "topic/heartrate",
+        "qos": "2",
+        "datatype": "auto-detect",
+        "broker": "2c8b4e692cea257f",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 450,
+        "y": 1580,
+        "wires": [
+            [
+                "function"
+            ]
+        ]
+    },
+    {
+        "id": "function",
+        "type": "function",
+        "z": "9fa41ae47307f8da",
+        "name": "Get Time & HeartRate",
+        "func": "// ถ้า payload เป็น string ของตัวเลข เช่น \"85\" → แปลงเป็น number\nif (typeof msg.payload === \"string\") {\n    msg.payload = parseFloat(msg.payload);\n}\n\n// ถ้า payload เป็น object มี heartRate อยู่แล้ว\nif (typeof msg.payload === \"object\" && msg.payload.heartRate !== undefined) {\n    let data = msg.payload;\n    let heartRate = parseFloat(data.heartRate);\n    let time = data.time || new Date().toLocaleString();\n    msg.payload = { time, heartRate };\n}\n\n// ถ้า payload เป็นตัวเลขดิบ เช่น 0, 85, 120\nelse if (typeof msg.payload === \"number\") {\n    let heartRate = msg.payload;\n    let time = new Date().toLocaleString();\n    msg.payload = { time, heartRate };\n}\n\n// ✅ เก็บค่าใน flow memory\nlet logs = flow.get(\"heartLogs\") || [];\nlogs.push(msg.payload);\n\n// จำกัดข้อมูลแค่ 20 ค่า (กัน chart ล้น)\nif (logs.length > 20) logs.shift();\n\nflow.set(\"heartLogs\", logs);\n\nnode.status({\n  fill: \"green\",\n  shape: \"dot\",\n  text: `HR:${msg.payload.heartRate} @ ${msg.payload.time}`\n});\n\nmsg.payload = { heartrate: logs }; // ✅ ส่งออกให้ node ถัดไป\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 660,
+        "y": 1580,
+        "wires": [
+            [
+                "debug",
+                "fd7cc4fda0f13e7a"
+            ]
+        ]
+    },
+    {
+        "id": "debug",
+        "type": "debug",
+        "z": "9fa41ae47307f8da",
+        "name": "Show Output",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 590,
+        "y": 1700,
+        "wires": []
+    },
+    {
+        "id": "4276fc325f68e2c3",
+        "type": "debug",
+        "z": "9fa41ae47307f8da",
+        "name": "debug 11",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 380,
+        "y": 1080,
+        "wires": []
+    },
+    {
+        "id": "5424559cd5e1fe1a",
+        "type": "function",
+        "z": "9fa41ae47307f8da",
+        "name": "Profile",
+        "func": "// 🟢 ใช้ชื่อ collection ที่ถูกต้อง\nmsg.collection = \"myCollection\";  // ✅ ชื่อ collection ต้องตรงกับใน MongoDB\n\n// 🟡 Operation: updateOne\nmsg.operation = \"updateOne\";\n\n// 🧩 ดึงข้อมูล profile จาก UI payload\nconst profile = msg.payload.profile;\n\n// if (!profile || !profile.email) {\n//     node.warn(\"⚠️ ไม่มีข้อมูล profile หรือไม่มี email\");\n//     return null;\n// }\n\n// 🎯 Filter: ใช้ email เป็น key ในการหา document\nconst filter = { id: \"1\" };\n\n// 🧱 ข้อมูลที่จะอัปเดต\nconst update = {\n    $set: {\n        name: profile.name,\n        phone: profile.phone,\n        email: profile.email,\n        // phone: profile.phone,\n        address: profile.address,\n        avatar: profile.avatar\n    }\n};\n\n// 📦 รวมทั้งหมดเข้า msg.payload\nmsg.payload = [filter, update];\n\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1090,
+        "y": 2100,
+        "wires": [
+            [
+                "4c8fa3044d5954af"
+            ]
+        ]
+    },
+    {
+        "id": "4c8fa3044d5954af",
+        "type": "mongodb4",
+        "z": "9fa41ae47307f8da",
+        "clientNode": "0f92581db7809ed0",
+        "mode": "collection",
+        "collection": "",
+        "operation": "",
+        "output": "toArray",
+        "maxTimeMS": "0",
+        "handleDocId": false,
+        "name": "",
+        "x": 1430,
+        "y": 2240,
+        "wires": [
+            [
+                "601e09ac855ec62e"
+            ]
+        ]
+    },
+    {
+        "id": "601e09ac855ec62e",
+        "type": "debug",
+        "z": "9fa41ae47307f8da",
+        "name": "debug 4",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1480,
+        "y": 2120,
+        "wires": []
+    },
+    {
+        "id": "560a88a71082b01f",
+        "type": "debug",
+        "z": "9fa41ae47307f8da",
+        "name": "debug 5",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 720,
+        "y": 2100,
+        "wires": []
+    },
+    {
+        "id": "ee7a6c2f7b632959",
+        "type": "function",
+        "z": "9fa41ae47307f8da",
+        "name": "Profile",
+        "func": "msg.collection = \"myCollection\"; \nmsg.operation = \"updateOne\";\n\nconst arr = msg.payload;\n\nconst filter = { id: \"1\" };\n\nconst scheduleArray = arr.map(item => ({\n    time: item.time,\n    slot: item.slot,\n    list: item.list\n}));\n\nconst update = {\n    $set: {\n        schedule: scheduleArray\n    }\n};\n\nmsg.payload = [filter, update];\n\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1070,
+        "y": 2240,
+        "wires": [
+            [
+                "4c8fa3044d5954af"
+            ]
+        ]
+    },
+    {
+        "id": "72b9af403ad9c696",
+        "type": "mongodb4",
+        "z": "9fa41ae47307f8da",
+        "clientNode": "0f92581db7809ed0",
+        "mode": "collection",
+        "collection": "",
+        "operation": "",
+        "output": "toArray",
+        "maxTimeMS": "0",
+        "handleDocId": false,
+        "name": "",
+        "x": 410,
+        "y": 1900,
+        "wires": [
+            [
+                "8ca7a211e450ac21",
+                "f4fdcd7e1309ed05",
+                "9957162394bd3265"
+            ]
+        ]
+    },
+    {
+        "id": "f361f98050987be3",
+        "type": "inject",
+        "z": "9fa41ae47307f8da",
+        "name": "",
+        "props": [],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "x": 410,
+        "y": 1760,
+        "wires": [
+            [
+                "137773a664886597"
+            ]
+        ]
+    },
+    {
+        "id": "8ca7a211e450ac21",
+        "type": "debug",
+        "z": "9fa41ae47307f8da",
+        "name": "debug 6",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 400,
+        "y": 1980,
+        "wires": []
+    },
+    {
+        "id": "137773a664886597",
+        "type": "function",
+        "z": "9fa41ae47307f8da",
+        "name": "function 2",
+        "func": "msg.collection = \"myCollection\";\nmsg.operation = \"find\";\n\n// ตัวกรอง (filter)\nmsg.payload = {};   // {} = เอาทุก document\n// หรือกรองเฉพาะ เช่น { age: { $gt: 18 } }\n\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 1840,
+        "wires": [
+            [
+                "72b9af403ad9c696"
+            ]
+        ]
+    },
+    {
+        "id": "f8a0d1083e305a76",
+        "type": "function",
+        "z": "9fa41ae47307f8da",
+        "name": "Profile",
+        "func": "msg.collection = \"myCollection\"; \nmsg.operation = \"updateOne\";\n\nconst arr = msg.payload.log;\n\nconst filter = { id: \"1\" };\n\nconst logArray = arr.map(item => ({\n    date: item.date,\n    time: item.time,\n    slot: item.slot,\n    list: item.list,\n    take: item.take == true\n}));\n\nconst update = {\n    $push: {\n        log: { $each: logArray }\n    }\n};\n\nmsg.payload = [filter, update];\n\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1250,
+        "y": 2380,
+        "wires": [
+            [
+                "4c8fa3044d5954af"
+            ]
+        ]
+    },
+    {
+        "id": "953946f5ff9b6ad9",
+        "type": "function",
+        "z": "9fa41ae47307f8da",
+        "name": "Profile",
+        "func": "msg.collection = \"myCollection\";\nmsg.operation = \"updateOne\";\n\nconst arr = msg.payload.contact;\n\nconst contactArray = arr.map(item => ({\n    name: item.name,\n    phone: item.phone,\n    relation: item.relation\n}));\n\nconst filter = { id: \"1\" };\n\nconst update = {\n    $set: {\n        contact: contactArray\n    }\n};\n\nmsg.payload = [filter, update];\n\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1070,
+        "y": 2200,
+        "wires": [
+            [
+                "4c8fa3044d5954af"
+            ]
+        ]
+    },
+    {
+        "id": "242197cb402c19c0",
+        "type": "ui-chart",
+        "z": "9fa41ae47307f8da",
+        "group": "99500c75740deac0",
+        "name": "",
+        "label": "",
+        "order": 3,
+        "chartType": "line",
+        "category": "topic",
+        "categoryType": "msg",
+        "xAxisLabel": "Time",
+        "xAxisProperty": "payload.x",
+        "xAxisPropertyType": "msg",
+        "xAxisType": "time",
+        "xAxisFormat": "",
+        "xAxisFormatType": "auto",
+        "xmin": "",
+        "xmax": "",
+        "yAxisLabel": "BPM",
+        "yAxisProperty": "payload.y",
+        "yAxisPropertyType": "msg",
+        "ymin": "0",
+        "ymax": "70",
+        "bins": 10,
+        "action": "append",
+        "stackSeries": false,
+        "pointShape": "circle",
+        "pointRadius": "12",
+        "showLegend": true,
+        "removeOlder": "1",
+        "removeOlderUnit": "86400",
+        "removeOlderPoints": "-",
+        "colors": [
+            "#000000",
+            "#ff0000",
+            "#ff7f0e",
+            "#000000",
+            "#a347e1",
+            "#d62728",
+            "#ff9896",
+            "#9467bd",
+            "#c5b0d5"
+        ],
+        "textColor": [
+            "#666666"
+        ],
+        "textColorDefault": true,
+        "gridColor": [
+            "#e5e5e5"
+        ],
+        "gridColorDefault": true,
+        "width": "8",
+        "height": 8,
+        "className": "",
+        "interpolation": "linear",
+        "x": 1260,
+        "y": 1560,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "81567a04bff56f50",
+        "type": "ui-template",
+        "z": "9fa41ae47307f8da",
+        "group": "99500c75740deac0",
+        "page": "",
+        "ui": "",
+        "name": "Heart_Rate Templete",
+        "order": 1,
+        "width": "12",
+        "height": 3,
+        "head": "",
+        "format": "<template>\n  <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n  <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n  <link href=\"https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300..800;1,300..800&display=swap\"\n    rel=\"stylesheet\">\n  <link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css\" />\n  <div class=\"hr-wrap\">\n    <div class=\"page-title\">💗 Heart Monitor</div>\n\n    <div class=\"hr-card\">\n      <div class=\"hr-header\">\n        <span class=\"title\">Heart Rate Monitoring</span>\n      </div>\n      <div class=\"hr-sub\">\n        Today's readings •\n        Average: <b>{{ avg }}</b> BPM •\n        Range: <b>{{ minVal }}</b>–<b>{{ maxVal }}</b> BPM\n      </div>\n    </div>\n  </div>\n</template>\n\n<script>\n  export default {\n  data() {\n    return {\n      avg: 0,\n      minVal: 0,\n      maxVal: 0,\n    };\n  },\n  mounted() {\n    this.$watch(\n      () => this.msg,\n      (newMsg) => {\n        if (\n          newMsg &&\n          newMsg.payload &&\n          Array.isArray(newMsg.payload.heartrate)\n        ) {\n          // ✅ ใช้ heartRate (ไม่ใช่ rate)\n          const hrList = newMsg.payload.heartrate\n            .map((h) => Number(h.heartRate))\n            .filter((n) => !isNaN(n));\n\n          if (hrList.length > 0) {\n            const sum = hrList.reduce((a, b) => a + b, 0);\n            this.avg = (sum / hrList.length).toFixed(1);\n            this.minVal = Math.min(...hrList);\n            this.maxVal = Math.max(...hrList);\n          } else {\n            this.avg = 0;\n            this.minVal = 0;\n            this.maxVal = 0;\n          }\n        }\n      },\n      { immediate: true, deep: true }\n    );\n  },\n};\n</script>\n\n<style scoped>\n  .hr-wrap {\n    width: 100%;\n    box-sizing: border-box;\n  }\n\n  .page-title {\n    font-family: \"Open Sans\", sans-serif;\n    font-size: 1.75rem;\n    line-height: 2.25rem;\n    font-weight: 700;\n    color: #2daa28;\n    text-align: left;\n  }\n\n  .hr-card {\n    width: 100%;\n    max-width: 2000px;\n    background: #fff;\n    padding: 15px;\n    margin: 0 auto;\n  }\n\n  .hr-header {\n    padding: 4px;\n    text-align: left;\n  }\n\n  .title {\n    font-family: \"Open Sans\", sans-serif;\n    font-size: 1.5rem;\n    line-height: 2rem;\n    font-weight: 525;\n    color: #333333;\n  }\n\n  .hr-sub {\n    font-family: \"Open Sans\", sans-serif;\n    font-size: 1.125rem;\n    line-height: 1.625rem;\n    font-weight: 400;\n    color: #505050;\n  }\n\n  @media (max-width: 600px) {\n    .hr-card {\n      max-width: 95%;\n    }\n\n    .hr-header {\n      font-size: 1.2rem;\n      text-align: center;\n    }\n\n    .page-title {\n      font-size: 1.4rem;\n    }\n\n    .title {\n      font-size: 1.2rem;\n      text-align: center;\n    }\n\n    .hr-sub {\n      font-size: 1rem;\n      text-align: center;\n    }\n  }\n</style>",
+        "storeOutMessages": true,
+        "passthru": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 1280,
+        "y": 1620,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "9d34f723baeecaf7",
+        "type": "ui-template",
+        "z": "9fa41ae47307f8da",
+        "group": "99500c75740deac0",
+        "page": "",
+        "ui": "",
+        "name": "",
+        "order": 2,
+        "width": "2",
+        "height": "1",
+        "head": "",
+        "format": "",
+        "storeOutMessages": true,
+        "passthru": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 1440,
+        "y": 1560,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "cddca1512a9b0d25",
+        "type": "ui-template",
+        "z": "9fa41ae47307f8da",
+        "group": "6ce8bb740ae3a167",
+        "page": "",
+        "ui": "",
+        "name": "",
+        "order": 1,
+        "width": 0,
+        "height": 14,
+        "head": "",
+        "format": "<template>\n    <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n    <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n    <link href=\"https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300..800;1,300..800&display=swap\"\n        rel=\"stylesheet\">\n    <link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css\" />\n\n\n    <div class=\"schedule-card\">\n        <h2 style=\"color: #2daa28\">💊 Medicine Schedule</h2>\n        <p class=\"subtitle\">Showing today's medication activity</p>\n        <div class=\"table-container\">\n            <table>\n                <thead>\n                    <tr>\n                        <!-- <th>Date</th> -->\n                        <th>Time</th>\n                        <th>Pill Slot</th>\n                        <th>Medicine</th>\n                        <th>Status</th>\n                    </tr>\n                </thead>\n\n                <tbody>\n                    <tr v-for=\"(log, index) in todayLogs\" :key=\"index\">\n                        <!-- <td>{{ formatDate(log.date) }}</td> -->\n                        <td>{{ log.time }}</td>\n                        <td><span class=\"pill-slot\">Slot {{ log.slot }}</span></td>\n                        <td>{{ log.list }}</td>\n                        <td>\n                            <span class=\"status\" :class=\"getStatus(log).toLowerCase()\">\n                                {{ getStatus(log) }}\n                            </span>\n                        </td>\n                    </tr>\n\n                    <tr v-if=\"todayLogs.length === 0\">\n                        <!-- <td>-</td> -->\n                        <td>-</td>\n                        <td><span class=\"pill-slot\">-</span></td>\n                        <td>-</td>\n                        <td><span class=\"status none\">-</span></td>\n                    </tr>\n                </tbody>\n            </table>\n        </div>\n\n    </div>\n</template>\n\n<script>\nexport default {\n    data() {\n        return {\n            logs: []\n        };\n    },\n    computed: {\n        todayLogs() {\n            const today = this.getTodayDateStr();\n\n            return this.logs.filter(l => {\n                if (!l.date) return false;\n                const [d, m, y] = l.date.split('-').map(Number);\n                const year = y > 2500 ? y - 543 : y;\n\n                const formatted = `${String(d).padStart(2, '0')}-${String(m).padStart(2, '0')}-${year}`;\n                const now = new Date();\n                const currentDate = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;\n\n                return formatted === currentDate;\n            });\n        }\n    },\n    methods: {\n        getTodayDateStr() {\n            const now = new Date();\n            const d = String(now.getDate()).padStart(2, '0');\n            const m = String(now.getMonth() + 1).padStart(2, '0');\n            const y = String(now.getFullYear());\n            return `${d}-${m}-${y}`;\n        },\n        formatDate(date) {\n            return date === this.getTodayDateStr() ? 'Today' : date;\n        },\n        getStatus(log) {\n            const now = new Date();\n            const [h, m] = log.time.split(':').map(Number);\n            let [d, mo, y] = log.date.split('-').map(Number);\n            if (y > 2500) y -= 543;\n\n            const logDate = new Date(y, mo - 1, d, h, m, 0, 0);\n\n            if (logDate > now) return 'Upcoming';\n            if (logDate <= now && log.take) return 'Taken';\n            if (logDate <= now && !log.take) return 'Missed';\n            return 'Unknown';\n        }\n    },\n    mounted() {\n        this.$watch(\n            'msg',\n            (val) => {\n                if (val && val.payload) {\n                    const data = val.payload;\n                    if (data.log) this.logs = data.log;\n                    else if (Array.isArray(data)) this.logs = data;\n                }\n            },\n            { immediate: true }\n        );\n    }\n};\n</script>\n\n<style>\n.schedule-card {\n    font-family: \"Open Sans\", sans-serif;\n    background: #fff;\n    border-radius: 12px;\n    box-shadow: 7px 10px 14px 6px rgba(0, 0, 0, 0.1);\n    padding: 20px;\n    width: 70%;\n    margin: 40px auto auto auto;\n\n}\n\n.subtitle {\n    font-family: \"Open Sans\", sans-serif;\n    color: #777;\n    margin-bottom: 12px;\n}\n\ntable {\n    width: 100%;\n    border-collapse: collapse;\n}\n\nth,\ntd {\n    text-align: left;\n    padding: 10px 12px;\n}\n\ntr:nth-child(even) {\n    background-color: #fafafa;\n}\n\n.pill-slot {\n    background: #eee;\n    border-radius: 8px;\n    padding: 4px 10px;\n    font-weight: 600;\n}\n\n.status {\n    padding: 4px 10px;\n    border-radius: 12px;\n    text-transform: capitalize;\n    font-weight: 600;\n}\n\n.status.taken {\n    background-color: #e6f9ed;\n    color: #16a34a;\n}\n\n.status.missed {\n    background-color: #fde8e8;\n    color: #dc2626;\n}\n\n.status.upcoming {\n    background-color: #eef2ff;\n    color: #3b82f6;\n}\n\n.status.none {\n    background-color: #f3f4f6;\n    color: #9ca3af;\n}\n\n.no-data {\n    text-align: center;\n    color: #888;\n    padding: 20px 0;\n}\n\n@media (max-width: 768px) {\n    .schedule-card {\n        padding: 16px;\n        width: 95%;\n    }\n\n    table {\n        font-size: 0.9rem;\n    }\n\n    th,\n    td {\n        padding: 8px 10px;\n    }\n}\n\n@media (max-width: 520px) {\n    .title {\n        font-size: 1.2rem;\n    }\n\n    .subtitle {\n        font-size: 0.9rem;\n    }\n\n    .schedule-card {\n        padding: 14px;\n    }\n\n    table {\n        font-size: 0.8rem;\n        min-width: 400px;\n    }\n\n    .pill-slot {\n        font-size: 0.8rem;\n        padding: 3px 8px;\n    }\n\n    .status {\n        font-size: 0.8rem;\n        padding: 3px 8px;\n    }\n\n    .table-container {\n        overflow-x: auto;\n        -webkit-overflow-scrolling: touch;\n    }\n}\n</style>",
+        "storeOutMessages": true,
+        "passthru": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 1260,
+        "y": 1800,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "1d11a9790937a9b1",
+        "type": "ui-template",
+        "z": "9fa41ae47307f8da",
+        "group": "0150152643a14a93",
+        "page": "",
+        "ui": "",
+        "name": "Setting",
+        "order": 1,
+        "width": 0,
+        "height": 14,
+        "head": "",
+        "format": "<template>  \n    <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n    <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n    <link href=\"https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300..800;1,300..800&display=swap\" rel=\"stylesheet\">\n    <link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css\"/>\n\n    <div>\n        <h1 class=\"header\">💊 PillCare</h1>\n        \n        <div class=\"bock\">\n            <div>\n                <div class=\"text-bigger-bold\">Medicine Shedule</div>\n                <div class=\"text-medium-bold\">Set your daily medication times</div>\n            </div>\n\n            <div v-for=\"(form, index) in forms\" :key=\"index\" class=\"block-input\">\n                <input class=\"input-time\" type=\"time\" v-model=\"form.time\" step=\"60\"/>\n                <div class=\"input-slot\">{{ form.slot }}</div>\n                <input class=\"input-list\" type=\"text\" v-model=\"form.list\" placeholder=\"Medicine List\" class=\"input-list\"/>\n                <button @click=\"removeForm(index)\" class=\"button-remove\">\n                    <i class=\"fa-regular fa-trash-can\"></i>\n                </button>\n\n            </div>\n\n            <button v-if=\"forms.length < 8\" class=\"button-block-add\" @click=\"addForm\">\n                <div class=\"button-font-add\">+  Add Medicine Time</div>\n            </button>\n        </div>\n        <button class=\"button-block\" @click=\"saveAll\"> \n            <div class=\"button-font\">Save All Setting</div>\n        </button>\n    </div>\n</template>\n\n<script>\nexport default {\n    data() {\n        return {\n            forms: []\n        };\n    },\n    methods: {\n        addForm() {\n            if (this.forms.length < 8) {\n                this.forms.push({\n                    time: \"\",\n                    slot: this.forms.length + 1,\n                    list: \"\"\n                });\n            }\n        },\n        removeForm(index) {\n            this.forms.splice(index, 1);\n            this.forms.forEach((f, i) => f.slot = i + 1);\n        },\n        saveAll() {\n            const payload = this.forms.map(f => ({\n                time: f.time,\n                slot: f.slot,\n                list: f.list\n            }));\n\n            this.send({ payload }); \n        }\n    }\n};\n</script>\n\n\n<style scoped>\n\n<!-- .font-test {\n    font-size: 80%;\n} -->\n.bock {\n    border: 1px solid rgb(201, 201, 201);\n    border-radius: 10px;\n    padding: 30px;\n    margin: 20px auto;\n    max-width: 70%;\n    flex-wrap: wrap;\n    justify-content: space-between;\n    align-items: center;\n    box-sizing: border-box;\n    min-width:525px\n}\n\n@media (max-width: 600px) {\n    .bock {\n        margin-left: 10px;\n        margin-right: 10px;\n        max-width: calc(100% - 20px);\n        min-width: 0px;\n    }\n}\n\n.button-block {\n    width: 100%;                \n    max-width: 70%;             \n    margin: 20px auto;          \n    padding: 10px 20px;          \n    border-radius: 10px;\n    background-color: #23a755;\n    display: flex;\n    justify-content: center;      \n    box-sizing: border-box;     \n    min-width:525px  \n}\n\n.button-block:hover {\n    background-color: #1e8e4a; \n    transition: all 0.2s ease-in-out; \n}\n\n@media (max-width: 600px) {\n    .button-block {\n        margin-left: 10px;\n        margin-right: 10px;\n        max-width: calc(100% - 20px);\n        min-width: 0px;\n    }\n}\n\n.button-block-add {\n    margin-top: 20px;\n    padding: 10px 20px;       \n    width: 100%;            \n    max-width: 100%;            \n    margin-left: auto;\n    margin-right: auto;\n    border: 1px solid rgb(201, 201, 201);\n    border-radius: 10px;\n    background: transparent;\n    text-align: center;        \n    box-sizing: border-box;\n}\n\n.button-block-add:hover {\n    background-color: #f0f0f0;\n    transition: all 0.2s ease-in-out; \n}\n\n.block-input {\n    margin-top: 20px;\n    padding: 10px;\n    max-width: 100%;\n    margin-left: auto;\n    margin-right: auto;\n    border: 1px solid rgb(201, 201, 201);\n    border-radius: 10px;\n    background: transparent;\n    text-align: center;        \n    box-sizing: border-box;\n}\n\n.add-block {\n    border-radius: 10px;\n    background-color: #f0f0f0;\n}\n\n.header {\n    font-family: \"Open Sans\", sans-serif;\n    font-size: 1.75rem;    \n    line-height: 2.25rem;  \n    font-weight: 700;      \n    color: #2daa28;\n}\n\n.text-bigger-bold {\n    font-family: \"Open Sans\", sans-serif;\n    font-optical-sizing: auto;\n    font-style: normal;\n    font-variation-settings: \"wdth\" 100;\n    font-size: 1.5rem;    \n    line-height: 2rem;    \n    font-weight: 525;  \n    color: #333333;\n}\n\n.text-medium-bold {\n    font-family: \"Open Sans\", sans-serif;\n    font-optical-sizing: auto;\n    font-style: normal;\n    font-variation-settings: \"wdth\" 100;\n    font-size: 1.125rem;       \n    line-height: 1.625rem;    \n    font-weight: 400;      \n    color: #505050;         \n}\n\n.button-font {\n    font-family: \"Open Sans\", sans-serif;\n    font-size: 1rem;    \n    line-height: 1.5rem;    \n    font-weight: bold;  \n    color: #ffffff;  \n    text-align: center;\n}\n\n.button-font-add {\n    font-family: \"Open Sans\", sans-serif;\n    font-size: 1rem;    \n    line-height: 1.5rem;    \n    font-weight: bold;  \n    color: #333333;  \n    text-align: center;\n}\n\n@media (max-width: 600px) {\n    .header { font-size: 1.4rem; }\n    .text-bigger-bold { font-size: 1.2rem; }\n    .text-medium-bold { font-size: 1rem; }\n\n    .bock {\n        max-width: calc(100% - 20px);\n        padding: 1rem;\n        margin: 10px;\n    }\n}\n\n.block-input {\n    display: flex;\n    align-items: center;\n    gap: 10px;\n    margin-top: 20px;\n    padding: 10px;\n    border: 1px solid rgb(201, 201, 201);\n    border-radius: 10px;\n    box-sizing: border-box;\n    font-family: \"Open Sans\", sans-serif;\n    font-size: 1rem;    \n    line-height: 1.5rem;    \n    font-weight: 500;  \n    color: #333333;  \n    text-align: center;\n}\n\n.input-time {\n    flex: 1;               \n    min-width: 130px;      \n    max-width: 180px; \n    border-radius: 10px;\n    text-align: center;\n    padding: 10px;\n    background-color: #f0f0f0;\n    text-align: center;\n}\n\n.input-slot {\n    width: 50px;           \n    flex: 0 0 50px;\n    border-radius: 10px;\n    padding: 10px;\n    background-color: #f0f0f0;\n    text-align: center;\n}\n\n.input-list {\n    flex: 2;\n    min-width: 150px;\n    border-radius: 10px;\n    padding: 10px;\n    background-color: #f0f0f0;\n    text-align: center;\n    color: #333333; \n}\n\n.button-remove {\n    width: 50px;           \n    flex: 0 0 50px;\n    border-radius: 10px;\n    padding: 10px;\n    background-color: #ffffff;\n    text-align: center;\n    border: 1px solid rgb(201, 201, 201);\n    transition: background-color 0.2s ease-in-out;\n}\n\n.button-remove i {\n    color: #505050;\n    font-size: 18px;\n    transition: color 0.2s ease-in-out; \n}\n\n.button-remove:hover {\n    background-color: #d64d4d;\n}\n\n.button-remove:hover i {\n    color: #ffffff;\n}\n\n.input-list:focus-within,\n.input-slot:focus-within,\n.input-time:focus-within {\n    border-color: #333333;\n    box-shadow: 0 0 5px 1px rgba(0,0,0,0.3);\n    transition: box-shadow 0.2s ease-in-out, border-color 0.2s ease-in-out;\n    outline: none;\n}\n\n@media (max-width: 600px) {\n    .block-input {\n        display: grid;\n        grid-template-columns: 1fr auto; \n        grid-template-rows: auto auto;   \n        gap: 10px;\n        align-items: center;\n     }\n\n    .input-time { \n        grid-column: 1; \n        grid-row: 1;\n        max-width: none;\n        min-width: none;\n    }\n    .input-slot { \n        grid-column: 2; \n        grid-row: 1; \n    }\n    .input-list { \n        grid-column: 1;\n        grid-row: 2; \n    }\n    .button-remove { \n        grid-column: 2; \n        grid-row: 2; \n    }\n}\n</style>",
+        "storeOutMessages": true,
+        "passthru": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 540,
+        "y": 2240,
+        "wires": [
+            [
+                "1136410a2bc9fe6d",
+                "e956df3b848f9f8f",
+                "ee7a6c2f7b632959"
+            ]
+        ]
+    },
+    {
+        "id": "d1e7389dfc066c2e",
+        "type": "ui-template",
+        "z": "9fa41ae47307f8da",
+        "group": "afdc5aca318c96a8",
+        "page": "",
+        "ui": "",
+        "name": "Emergency contact",
+        "order": 1,
+        "width": 0,
+        "height": 17,
+        "head": "",
+        "format": "<template>\n  <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n  <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n  <link href=\"https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300..800;1,300..800&display=swap\"\n    rel=\"stylesheet\">\n  <link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css\" />\n\n  <div>\n    <h1 class=\"head\">📲 Emergency Contact</h1>\n\n    <div class=\"block\">\n\n      <div v-for=\"(person, index) in contact\" :key=\"index\" class=\"contact-block\">\n        <!-- โหมดแก้ไข -->\n        <div v-if=\"person.edit\" class=\"all-input\">\n          <input v-model=\"person.name\" placeholder=\"name\" class=\"input-name\" />\n          <input v-model=\"person.phone\" placeholder=\"phone\" class=\"input-phone\" />\n          <input v-model=\"person.relation\" placeholder=\"relation\" class=\"input-relation\" />\n        </div>\n\n        <!-- โหมดแสดงผล -->\n        <div v-else class=\"show-all-contact\">\n          <div class=\"edit-name\">\n            <div class=\"show-name\">\n              <i class=\"fas fa-user-tag\"></i>\n              <span>{{ person.name }}</span>\n            </div>\n            <div class=\"btn-edit-delete\">\n              <button @click=\"editing(index)\" class=\"edit\">\n                <i class=\"fas fa-edit\"></i>\n              </button>\n              <button @click=\"deleting(index)\" class=\"delete\">\n                <i class=\"fas fa-trash-alt\"></i>\n              </button>\n            </div>\n          </div>\n\n          <div class=\"relation-only\">\n            <div class=\"show-relation\">{{ person.relation }}</div>\n          </div>\n\n          <div class=\"phone-only\">\n            <div class=\"text-phone\">\n              <div class=\"show-phone\">\n                <i class=\"fas fa-phone-volume\"></i> {{ person.phone }}\n              </div>\n            </div>\n            <div class=\"copybtn\">\n              <button class=\"copy-btn\" @click=\"copy_phone(person.phone)\">Copy Clipboard</button>\n            </div>\n          </div>\n        </div>\n      </div>\n\n      <button @click=\"Add\" v-if=\"contact.length < 3\" class=\"addbutton\">+ Add Contact</button>\n\n      <button class=\"button-block\" @click=\"saveAll\">\n        <div class=\"button-font\">Save All Setting</div>\n      </button>\n    </div>\n  </div>\n</template>\n\n<script>\n  export default {\n  data() {\n    return {\n      contact: []\n    };\n  },\n  methods: {\n    Add() {\n      this.contact.push({\n        name: \"\",\n        phone: \"\",\n        relation: \"\",\n        edit: true\n      });\n    },\n    editing(index) {\n      this.contact[index].edit = true;\n    },\n    deleting(index) {\n      this.contact.splice(index, 1);\n    },\n    async copy_phone(phone) {\n      try {\n        await navigator.clipboard.writeText(phone);\n      } catch (err) {\n        console.error(err);\n      }\n    },\n    saveAll() {\n      // ปิดโหมดแก้ไขทั้งหมด\n      this.contact.forEach(c => (c.edit = false));\n\n      // กรองเฉพาะที่กรอกครบ (ไม่เอากล่องว่าง)\n      const validContacts = this.contact.filter(c => \n        c.name.trim() !== \"\" && c.phone.trim() !== \"\" && c.relation.trim() !== \"\"\n      );\n\n      // ส่งข้อมูลทั้งหมดให้ Node-RED\n      const payload = { contact: validContacts };\n      this.send({ payload });\n    }\n  }\n};\n</script>\n\n\n\n<style>\n  .fas.fa-user-tag {\n    font-size: 1.75rem;\n  }\n\n  .btn-edit-delete {\n    display: flex;\n    gap: 6px;\n    flex-wrap: wrap;\n    justify-content: end;\n  }\n\n  .delete {\n    border: none;\n    background-color: #ff0000;\n    color: #333;\n    font-weight: bold;\n    padding: 8px 16px;\n    border-radius: 10px;\n\n  }\n\n  .delete:hover {\n    background-color: #a70000;\n    transition: all 0.2s ease-in-out;\n\n  }\n\n  .edit-name {\n    display: flex;\n    gap: 8px;\n    justify-content: space-between;\n    width: 100%;\n    margin-bottom: 5px;\n    margin-top: 9px;\n  }\n\n  .edit {\n    border: none;\n    background-color: #ffcc00;\n    color: #333;\n    font-weight: bold;\n    padding: 8px 16px;\n    border-radius: 10px;\n  }\n\n  .edit:hover {\n    background-color: #e6b800;\n    transition: all 0.2s ease-in-out;\n  }\n\n\n  .fas.fa-phone-volume {\n    color: #2daa28;\n  }\n\n  .show-phone {\n    display: flex;\n    gap: 15px;\n  }\n\n  .copybtn {\n    border: 1px solid rgb(201, 201, 201);\n    background-color: white;\n    border-radius: 10px;\n    display: flex;\n    flex-direction: column;\n    margin-top: 15px;\n    margin-bottom: 15px;\n    width: 75%;\n    margin-left: auto;\n    margin-right: auto;\n    padding: 10px;\n\n  }\n\n  .copybtn:hover {\n    background-color: #e9f5e9;\n    transition: all 0.2s ease-in-out;\n    color: #1b6b1b;\n  }\n\n  .text-phone {\n    margin-left: 30px;\n    margin-top: 20px;\n    font-size: 1.25rem;\n    text-align: left;\n  }\n\n  .phone-only {\n    display: flex;\n    background-color: #f8f8f8;\n    border: 1px solid rgb(201, 201, 201);\n    border-radius: 10px;\n    width: 90%;\n    margin-left: auto;\n    margin-right: auto;\n    display: flex;\n    flex-direction: column;\n    margin-top: 10px;\n    margin-bottom: 10px;\n\n  }\n\n  .relation-only {\n    display: flex;\n    flex-direction: row;\n    margin-left: 55px;\n    color: #727272;\n  }\n\n  .head {\n    font-family: \"Open Sans\", sans-serif;\n    font-size: 1.75rem;\n    line-height: 2.25rem;\n    font-weight: 700;\n    color: #2daa28;\n  }\n\n  .button-block {\n  width: 100%;\n  max-width: 100%;\n  margin-top: 20px;\n  margin-left: auto;\n  margin-right: auto;\n  padding : 20px;\n  border-radius: 10px;\n  background-color: #23a755;\n  display: flex;\n  justify-content: center;\n  box-sizing: border-box;\n  min-width:525px;\n  border: 1px solid rgb(201, 201, 201);\n  }\n  \n  .button-block:hover {\n  background-color: #1e8e4a;\n  transition: all 0.2s ease-in-out;\n  }\n  \n  .button-font {\n  font-family: \"Open Sans\", sans-serif;\n  font-size: 1rem;\n  line-height: 1.5rem;\n  font-weight: bold;\n  color: #ffffff;\n  text-align: center;\n  }\n\n  .block {\n    margin-top: 20px;\n    width: 80%;\n    margin-left: auto;\n    margin-right: auto;\n    max-width: 80%;\n    padding: 20px;\n    border: 1px solid rgb(201, 201, 201);\n    border-radius: 10px;\n    flex-wrap: wrap;\n    justify-content: space-between;\n  }\n\n  .addbutton {\n    margin-top: 20px;\n    padding: 20px;\n    width: 100%;\n    max-width: 100%;\n    margin-left: auto;\n    margin-right: auto;\n    border: 1px solid rgb(201, 201, 201);\n    border-radius: 10px;\n    /* font */\n    text-align: center;\n    font-family: \"Open Sans\", sans-serif;\n    font-size: 1rem;\n    line-height: 1.5rem;\n    font-weight: bold;\n    color: #333333;\n    text-align: center;\n\n  }\n\n  .addbutton:hover {\n    background-color: #f0f0f0;\n    transition: all 0.2s ease-in-out;\n  }\n\n  .show-name {\n    display: flex;\n    font-family: \"Open Sans\", sans-serif;\n    font-size: 1.75rem;\n    line-height: 2.25rem;\n    font-weight: 600;\n    margin-left: 10px;\n    text-align: left;\n    gap: 10px;\n  }\n\n  .input-name,\n  .input-phone,\n  .input-relation {\n    flex: 1;\n    min-width: 150px;\n    border-radius: 10px;\n    padding: 10px;\n    background-color: #f0f0f0;\n    text-align: center;\n    color: #333333;\n  }\n\n  .input-name:focus-within,\n  .input-phone:focus-within,\n  .input-relation:focus-within {\n    border-color: #333333;\n    box-shadow: 0 0 5px 1px rgba(0, 0, 0, 0.3);\n    transition: box-shadow 0.2s ease-in-out, border-color 0.2s ease-in-out;\n    outline: none;\n  }\n\n  .contact-block {\n    display: flex;\n    gap: 10px;\n    margin-top: 20px;\n    padding: 10px;\n    border: 1px solid rgb(201, 201, 201);\n    border-radius: 10px;\n    box-sizing: border-box;\n    font-family: \"Open Sans\", sans-serif;\n    font-size: 1rem;\n    line-height: 1.5rem;\n    font-weight: 500;\n    color: #333333;\n    text-align: center;\n  }\n\n  .all-input {\n    display: flex;\n    gap: 20px;\n    width: 100%;\n    flex-wrap: wrap;\n    justify-content: space-between;\n    min-width: 200px;\n  }\n\n  .saveAll {\n    display: flex;\n    border-radius: 10px;\n    background-color: #23a755;\n    color: #f0f0f0;\n    font-weight: bold;\n    justify-content: center;\n    align-items: center;\n    min-width: 70px;\n    padding: 10px;\n\n  }\n\n  .saveAll:hover {\n    background-color: #1e8e4a;\n    transition: all 0.2s ease-in-out;\n  }\n\n  .show-all-contact {\n    display: flex;\n    width: 100%;\n    flex-direction: column;\n    box-sizing: border-box;\n\n  }\n\n  @media (max-width: 1300px) {\n    .edit-name {\n      margin-top: 9px;\n    }\n\n    .block {\n      width: 90%;\n    }\n\n    .contact-block {\n      flex-direction: column;\n    }\n\n    .all-input {\n      flex-direction: column;\n    }\n  }\n\n  @media (max-width: 1024px) {\n    .block {\n      width: 90%;\n    }\n  }\n\n  @media (max-width: 768px) {\n\n    .edit-name {\n      margin-top: 9px;\n    }\n\n    .head {\n      font-size: 1.75rem;\n    }\n\n    .input-name,\n    .input-phone,\n    .input-relation {\n      flex: 1 1 100%;\n    }\n\n    .show-name .text-phone {\n      font-size: 1.5rem;\n    }\n\n    .relation-only {\n      font-size: 1rem;\n    }\n\n  }\n\n  @media (max-width: 530px) {\n    .head {\n      font-size: 1.5rem;\n    }\n\n    .block {\n      width: 95%;\n      padding: 10px;\n    }\n\n    .contact-block {\n      padding: 5px;\n      font-size: 0.9rem;\n    }\n\n    .edit,\n    .delete {\n      padding: 6px 10px;\n    }\n\n    .saveAll {\n      width: 100%;\n    }\n\n    .copy-btn {\n      font-size: 0.9rem;\n    }\n\n    .show-name {\n      font-size: 1.4rem;\n      margin-top: 8px;\n    }\n\n    .show-phone {\n      font-size: 1.3rem;\n    }\n\n    .relation-only {\n      font-size: 1rem;\n    }\n\n    .fas.fa-user-tag {\n      font-size: 1.75rem;\n    }\n  }\n\n\n  @media (max-width: 420px) {\n    .edit-name {\n      margin-top: 9px;\n    }\n\n    .show-name {\n      font-size: 1.2rem;\n      margin-top: 1.5px;\n    }\n\n    .relation-only {\n      font-size: 0.9rem;\n    }\n\n    .show-phone {\n      font-size: 1.1rem;\n    }\n\n    .fas.fa-user-tag {\n      font-size: 1.5rem;\n    }\n\n  }\n</style>",
+        "storeOutMessages": true,
+        "passthru": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 570,
+        "y": 2200,
+        "wires": [
+            [
+                "831558dccc9ef186",
+                "953946f5ff9b6ad9"
+            ]
+        ]
+    },
+    {
+        "id": "81536fda93487240",
+        "type": "ui-template",
+        "z": "9fa41ae47307f8da",
+        "group": "",
+        "page": "4165bf4464c23945",
+        "ui": "",
+        "name": "View-History",
+        "order": 0,
+        "width": 0,
+        "height": 0,
+        "head": "",
+        "format": "<template>\n  <div class=\"container\">\n    <!-- Header -->\n    <header class=\"header\">\n      <div class=\"logo\">💊 <span>PillCare</span></div>\n    </header>\n\n    <!-- Log & History Section -->\n    <section class=\"card gradient\">\n      <h2>📊 Log & History</h2>\n      <p>Complete medication intake history and analytics</p>\n    </section>\n\n    <!-- Filters Section -->\n    <section class=\"card\">\n      <h3>⚙️ Filters</h3>\n      <div class=\"filters\">\n        <div>\n          <label>Date Range</label>\n          <select v-model=\"dateRange\">\n            <option>Last 7 days</option>\n            <option>Last 30 days</option>\n          </select>\n        </div>\n        <div>\n          <label>Status Filter</label>\n          <select v-model=\"statusFilter\">\n            <option>All Status</option>\n            <option>Taken</option>\n            <option>Missed</option>\n            <option>Pending</option>\n          </select>\n        </div>\n      </div>\n    </section>\n\n    <!-- Charts Section -->\n    <!-- <div class=\"charts\"> -->\n      <section class=\"card chart\">\n        <h4>💊 Medication Compliance</h4>\n        <canvas ref=\"pieChart\"></canvas>\n      </section>\n    <!-- </div> -->\n\n    <!-- Detailed Log -->\n    <section class=\"Table-Datail\">\n      <h3>📋 Detailed Log</h3>\n      <table>\n        <thead>\n          <tr>\n            <th>Date</th>\n            <th>Time</th>\n            <th>Pill Slot</th>\n            <th>Pill Name</th>\n            <th>Status</th>\n          </tr>\n        </thead>\n        <tbody>\n          <tr v-for=\"(item,index) in filteredData\" :key=\"index\">\n            <td>{{ item.date }}</td>\n            <td>{{ item.time }}</td>\n            <td><span class=\"slot\">{{ item.slot }}</span></td>\n            <td>{{ item.name }}</td>\n            <td>\n              <span :class=\"['status', item.status?.toLowerCase()]\">{{ item.status }}</span>\n            </td>\n          </tr>\n        </tbody>\n      </table>\n    </section>\n  </div>\n</template>\n\n<script>\n  export default {\n  data() {\n    return {\n      dateRange: \"Last 7 days\",\n      statusFilter: \"All Status\",\n      history: [],\n      stats: { taken: 0, missed: 0, pending: 0 },\n      pieChart: null,\n      barChart: null,\n    };\n  },\n\n  computed: {\n    filteredData() {\n      if (this.statusFilter === \"All Status\") return this.history;\n      return this.history.filter(i => i.status === this.statusFilter);\n    },\n  },\n\n  methods: {\n    async ensureChartJsReady() {\n      if (window.Chart) return true;\n\n      return new Promise((resolve) => {\n        const script = document.createElement(\"script\");\n        script.src = \"https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js\";\n        script.onload = () => {\n          console.log(\"✅ Chart.js loaded.\");\n          resolve(true);\n        };\n        document.head.appendChild(script);\n      });\n    },\n\n    async initCharts() {\n      // 🟢 รอ Chart.js โหลดก่อน\n      await this.ensureChartJsReady();\n      const Chart = window.Chart;\n      console.log(\"✅ Chart.js ready, creating charts...\");\n\n      this.$nextTick(() => {\n        // Pie Chart\n        const pieCtx = this.$refs.pieChart.getContext(\"2d\");\n        this.pieChart = new Chart(pieCtx, {\n          type: \"pie\",\n          data: {\n            labels: [\"Taken\", \"Missed\", \"Pending\"],\n            datasets: [\n              {\n                data: [this.stats.taken, this.stats.missed, this.stats.pending],\n                backgroundColor: [\"#4CAF50\", \"#F44336\", \"#FFC107\"],\n              },\n            ],\n          },\n          options: {\n            aspectRatio: 1.6,\n            plugins: { legend: { position: \"bottom\" } },\n          },\n        });\n\n        // Bar Chart\n        const barCtx = this.$refs.barChart.getContext(\"2d\");\n        this.barChart = new Chart(barCtx, {\n          type: \"bar\",\n          data: {\n            labels: [\"Mon\", \"Tue\", \"Wed\", \"Thu\", \"Fri\", \"Sat\", \"Sun\"],\n            datasets: [\n              { label: \"Missed\", data: [1, 0, 1, 0, 0, 0, 0], backgroundColor: \"#F44336\" },\n              { label: \"Taken\", data: [4, 5, 4, 5, 4, 5, 5], backgroundColor: \"#4CAF50\" },\n            ],\n          },\n          options: {\n            responsive: true,\n            maintainAspectRatio: true,\n            aspectRatio: 2.2,\n            scales: {\n              y: { beginAtZero: true, ticks: { stepSize: 1 }, suggestedMax: 6 },\n            },\n            plugins: { legend: { position: \"bottom\" } },\n          },\n        });\n      });\n    },\n\n    updateCharts(stats) {\n      if (!this.pieChart || !this.barChart) return;\n      setTimeout(() => {\n        try {\n          this.pieChart.data.datasets[0].data = [\n            stats.taken || 0,\n            stats.missed || 0,\n            stats.pending || 0,\n          ];\n          this.pieChart.update();\n\n          const missed = stats.weeklyTrend?.missed || [0, 0, 0, 0, 0, 0, 0];\n          const taken = stats.weeklyTrend?.taken || [0, 0, 0, 0, 0, 0, 0];\n          this.barChart.data.datasets[0].data = missed;\n          this.barChart.data.datasets[1].data = taken;\n          this.barChart.update();\n\n          console.log(\"✅ Charts updated successfully\");\n        } catch (err) {\n          console.warn(\"⚠️ Chart update error:\", err.message);\n        }\n      }, 200);\n    },\n  },\n\n  mounted() {\n    console.log(\"🟢 History UI ready\");\n    this.initCharts();\n\n    this.$watch(\n      \"msg\",\n      (newMsg) => {\n        console.log(\"📩 Full msg received:\", newMsg);\n        const payload =\n          newMsg?.payload?.history || newMsg?.payload?.stats\n            ? newMsg.payload\n            : newMsg?.payload?.payload || {};\n\n        if (payload.history && Array.isArray(payload.history)) {\n          this.history = [...payload.history];\n        }\n\n        if (payload.stats) {\n          this.stats = payload.stats;\n          this.updateCharts(payload.stats);\n        }\n      },\n      { immediate: true, deep: true }\n    );\n  },\n};\n</script>\n\n<style scoped>\n  @import url(\"https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap\");\n\n  * {\n    font-family: \"Inter\", sans-serif;\n  }\n\n  .container {\n    width: 100%;\n    max-width: 1400px;\n    margin: 0 auto;\n    background: #ffffff;\n    padding: 30px 40px;\n    box-sizing: border-box;\n    color: #333;\n  }\n\n  .header {\n    display: flex;\n    align-items: center;\n    margin-bottom: 15px;\n  }\n\n  .logo {\n    font-size: 35px;\n    font-weight: bold;\n    color: #2ecc71;\n    display: flex;\n    align-items: center;\n    gap: 5px;\n  }\n\n  .card {\n    background: #fff;\n    border-radius: 12px;\n    padding: 20px 25px;\n    margin: 15px 0;\n    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);\n  }\n\n  .gradient {\n    background: linear-gradient(to right, #e8f8f5, #f9fdf8);\n  }\n\n  .filters {\n    display: flex;\n    gap: 30px;\n    margin-top: 10px;\n  }\n\n  .filters select {\n    width: 180px;\n    padding: 8px;\n    border-radius: 8px;\n    border: 1px solid #ddd;\n  }\n\n  .charts {\n    display: flex;\n    gap: 25px;\n  }\n\n  canvas {\n    width: 100%;\n    height: auto;\n    max-height: 340px;\n  }\n\n  .Table-Datail {\n    background: #fff;\n    border-radius: 12px;\n    padding: 20px;\n    margin-top: 20px;\n    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);\n  }\n\n  table {\n    width: 100%;\n    border-collapse: collapse;\n    margin-top: 10px;\n  }\n\n  th,\n  td {\n    text-align: left;\n    padding: 10px;\n    border-bottom: 1px solid #eee;\n  }\n\n  .slot {\n    background: #f3f3f3;\n    border-radius: 6px;\n    padding: 3px 8px;\n    font-weight: 500;\n  }\n\n  .status {\n    border-radius: 8px;\n    padding: 4px 10px;\n    color: white;\n    font-weight: bold;\n  }\n\n  .status.taken {\n    background: #4caf50;\n  }\n\n  .status.missed {\n    background: #f44336;\n  }\n\n  .status.pending {\n    background: #ffc107;\n    color: #333;\n  }\n\n  body,\n  .nr-dashboard-theme,\n  .nr-dashboard-cardcontainer,\n  html,\n  .v-application,\n  .v-main,\n  .flowfuse-dashboard {\n    background-color: #ffffff !important;\n  }\n</style>",
+        "storeOutMessages": true,
+        "passthru": true,
+        "resendOnRefresh": true,
+        "templateScope": "widget:page",
+        "className": "",
+        "x": 1310,
+        "y": 1660,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "37b74eba0574eaf5",
+        "type": "ui-template",
+        "z": "9fa41ae47307f8da",
+        "group": "94fefa3ff5bc8281",
+        "page": "",
+        "ui": "",
+        "name": "Alerts UI",
+        "order": 1,
+        "width": "12",
+        "height": 14,
+        "head": "",
+        "format": "<template>\n  <link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css\" />\n  <div class=\"container\">\n    <header class=\"header\">\n      <div class=\"logo\">🔔 <span>Alerts Center</span></div>\n    </header>\n\n    <!-- Filter -->\n    <div class=\"filter-bar\">\n      <div class=\"filters\">\n        <button\n          v-for=\"mode in ['All','Unread','Read']\"\n          :key=\"mode\"\n          :class=\"['filter-btn',{active:filterMode===mode}]\"\n          @click=\"filterMode=mode\"\n        >\n          {{mode}}\n        </button>\n      </div>\n      <button class=\"read-btn\" @click=\"markAllRead\">\n        <i class=\"fa-regular fa-eye\"></i> Mark All as Read\n      </button>\n    </div>\n\n    <!-- Summary -->\n    <section class=\"summary\">\n      <div class=\"summary-item danger\">\n        <i class=\"fa-solid fa-triangle-exclamation\"></i>\n        <span>{{ alertStats.critical ?? 0 }} Critical</span>\n      </div>\n      <div class=\"summary-item warning\">\n        <i class=\"fa-solid fa-circle-exclamation\"></i>\n        <span>{{ alertStats.warning ?? 0 }} Warnings</span>\n      </div>\n      <div class=\"summary-item success\">\n        <i class=\"fa-solid fa-circle-check\"></i>\n        <span>{{ alertStats.success ?? 0 }} Success</span>\n      </div>\n    </section>\n\n    <!-- Alerts -->\n    <section class=\"alerts-list card\">\n      <h3>📋 Recent Alerts</h3>\n      <div v-if=\"filteredAlerts.length===0\" class=\"empty\">No alerts to show</div>\n\n      <div v-for=\"(a,i) in filteredAlerts\" :key=\"i\" class=\"alert-item\" :class=\"[a.type.toLowerCase(),{read:a.read}]\">\n        <div class=\"icon\"><i :class=\"alertIcon(a.type)\"></i></div>\n        <div class=\"details\">\n          <div class=\"title\">{{a.title}}</div>\n          <div class=\"time\">{{a.time}}</div>\n          <div class=\"message\">{{a.message}}</div>\n        </div>\n      </div>\n    </section>\n  </div>\n</template>\n\n<script>\n  export default {\n  data() {\n    return {\n      alerts: [],\n      alertStats: { critical: 0, warning: 0, success: 0 },\n      filterMode: \"All\",\n    };\n  },\n  computed: {\n    filteredAlerts() {\n      if (this.filterMode === \"Unread\") return this.alerts.filter(a => !a.read);\n      if (this.filterMode === \"Read\") return this.alerts.filter(a => a.read);\n      return this.alerts;\n    },\n  },\n  methods: {\n    alertIcon(type) {\n      switch (type) {\n        case \"Critical\": return \"fa-solid fa-triangle-exclamation\";\n        case \"Warning\": return \"fa-solid fa-circle-exclamation\";\n        case \"Success\": return \"fa-solid fa-circle-check\";\n        default: return \"fa-regular fa-bell\";\n      }\n    },\n    markAllRead() {\n      this.alerts.forEach(a => a.read = true);\n    },\n    updateStats() {\n      this.alertStats = {\n        critical: this.alerts.filter(a => a.type === \"Critical\").length,\n        warning: this.alerts.filter(a => a.type === \"Warning\").length,\n        success: this.alerts.filter(a => a.type === \"Success\").length,\n      };\n    },\n  },\n  mounted() {\n    console.log(\"🟢 Alerts UI ready\");\n\n    // ✅ Watch ทั้ง object msg จาก Node-RED\n  this.$watch(\n  'msg',\n  (newMsg) => {\n  console.log(\"📩 Full msg received:\", newMsg);\n  \n  // ✅ รองรับทั้ง msg.payload และ msg.payload.payload (บางกรณีซ้อน 2 ชั้น)\n  const payload = newMsg?.payload?.alerts\n  ? newMsg.payload\n  : newMsg?.payload?.payload || {};\n  \n  if (payload && Array.isArray(payload.alerts)) {\n  console.log(\"✅ Found alerts:\", payload.alerts);\n  this.alerts = [...payload.alerts];\n  this.updateStats();\n  } else {\n  console.warn(\"⚠️ No alerts array found in payload\", payload);\n  }\n  },\n  { immediate: true, deep: true }\n  );\n  },\n};\n</script>\n\n<style scoped>\n  * {\n    font-family: \"Inter\", sans-serif;\n  }\n\n  .container {\n    max-width: 900px;\n    margin: auto;\n    padding: 25px 35px;\n    background: white;\n    border-radius: 20px;\n    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05);\n  }\n\n  .logo {\n    font-size: 28px;\n    font-weight: bold;\n    color: #27ae60;\n    display: flex;\n    align-items: center;\n    gap: 8px;\n    margin-bottom: 10px;\n  }\n\n  .filter-bar {\n    display: flex;\n    justify-content: space-between;\n    align-items: center;\n    margin-bottom: 20px;\n    flex-wrap: wrap;\n    gap: 10px;\n  }\n\n  .filters {\n    display: flex;\n    gap: 10px;\n  }\n\n  .filter-btn {\n    padding: 8px 15px;\n    border-radius: 8px;\n    border: 1px solid #ccc;\n    background: #fff;\n    font-weight: 600;\n    cursor: pointer;\n    transition: 0.2s;\n  }\n\n  .filter-btn.active {\n    background: #27ae60;\n    color: white;\n    border-color: #27ae60;\n  }\n\n  .filter-btn:hover {\n    background: #eafaf1;\n  }\n\n  .read-btn {\n    border: none;\n    background: #3498db;\n    color: white;\n    padding: 10px 15px;\n    border-radius: 8px;\n    font-weight: 600;\n    cursor: pointer;\n    transition: 0.2s;\n  }\n\n  .read-btn:hover {\n    background: #2980b9;\n  }\n\n  .summary {\n    display: flex;\n    justify-content: space-around;\n    margin-bottom: 20px;\n    flex-wrap: wrap;\n    gap: 10px;\n  }\n\n  .summary-item {\n    padding: 10px 20px;\n    border-radius: 12px;\n    color: white;\n    font-weight: 600;\n    display: flex;\n    align-items: center;\n    gap: 10px;\n    font-size: 22px;\n  }\n\n  .danger {\n    background: #e74c3c;\n  }\n\n  .warning {\n    background: #f39c12;\n  }\n\n  .success {\n    background: #2ecc71;\n  }\n\n  .alerts-list {\n    max-height: 300px;\n    overflow-y: auto;\n    overflow-x: hidden;\n    scrollbar-width: thin;\n  }\n\n  .alert-item {\n    display: flex;\n    align-items: flex-start;\n    gap: 15px;\n    padding: 12px;\n    border-radius: 10px;\n    margin-bottom: 10px;\n    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);\n    transition: 0.3s;\n  }\n\n  .alert-item.critical {\n    border-left: 6px solid #e74c3c;\n    background: #fdecea;\n  }\n\n  .alert-item.warning {\n    border-left: 6px solid #f39c12;\n    background: #fff5e6;\n  }\n\n  .alert-item.success {\n    border-left: 6px solid #2ecc71;\n    background: #ecf9f1;\n  }\n\n  .alert-item.read {\n    opacity: 0.6;\n    filter: grayscale(40%);\n  }\n\n  .details .title {\n    font-weight: 600;\n    font-size: 16px;\n  }\n\n  .details .time {\n    color: #888;\n    font-size: 13px;\n  }\n\n  .details .message {\n    margin-top: 5px;\n  }\n\n  .empty {\n    text-align: center;\n    padding: 20px;\n    color: #888;\n  }\n\n  /* ✅ Responsive (iPhone SE) */\n  @media (max-width: 400px) {\n    .container {\n      padding: 15px;\n      border-radius: 12px;\n    }\n\n    .logo {\n      font-size: 22px;\n      margin-bottom: 10px;\n    }\n\n    .filter-bar {\n      flex-direction: column;\n      align-items: stretch;\n      gap: 8px;\n    }\n\n    .filters {\n      justify-content: space-between;\n    }\n\n    .filter-btn {\n      flex: 1;\n      font-size: 14px;\n      padding: 6px 10px;\n    }\n\n    .read-btn {\n      width: 100%;\n      font-size: 14px;\n      padding: 8px;\n    }\n\n    .summary {\n      flex-direction: column;\n      align-items: stretch;\n    }\n\n    .summary-item {\n      justify-content: center;\n      font-size: 18px;\n    }\n\n    .alerts-list {\n      max-height: 240px;\n    }\n\n    .alert-item {\n      flex-direction: column;\n      gap: 8px;\n    }\n  }\n</style>",
+        "storeOutMessages": true,
+        "passthru": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 1060,
+        "y": 1920,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "20cb443b7e04e143",
+        "type": "ui-template",
+        "z": "9fa41ae47307f8da",
+        "group": "",
+        "page": "7d5b05598da17b0f",
+        "ui": "",
+        "name": "View-Profile",
+        "order": 0,
+        "width": 0,
+        "height": 0,
+        "head": "",
+        "format": "<template>\n  <div class=\"container\">\n    <!-- Header -->\n    <header class=\"header\">\n      <div class=\"logo\">👤 <span>User Profile</span></div>\n    </header>\n\n    <!-- Profile Summary -->\n    <section class=\"card profile-summary gradient\">\n      <div class=\"avatar-wrapper\">\n        <img\n          v-if=\"profile.avatar\"\n          :src=\"profile.avatar\"\n          class=\"avatar\"\n          alt=\"avatar\"\n        />\n        <div v-else class=\"avatar-placeholder\">🧑</div>\n\n        <!-- Upload Button -->\n        <label class=\"upload-btn\">\n          📸\n          <input type=\"file\" accept=\"image/*\" @change=\"onAvatarChange\" />\n        </label>\n      </div>\n\n      <div class=\"info\">\n        <h2>{{ profile.name || \"Your Name\" }}</h2>\n        <p class=\"email\">{{ profile.email || \"example@email.com\" }}</p>\n      </div>\n    </section>\n\n    <!-- Editable Form -->\n    <section class=\"card profile-form\">\n      <h3>📝 Profile Information</h3>\n\n      <div class=\"form-grid\">\n        <div class=\"form-group\">\n          <label>Full Name</label>\n          <input type=\"text\" v-model=\"profile.name\" placeholder=\"Enter your full name\" />\n        </div>\n\n        <div class=\"form-group\">\n          <label>Email</label>\n          <input type=\"email\" v-model=\"profile.email\" placeholder=\"example@email.com\" />\n        </div>\n\n        <div class=\"form-group\">\n          <label>Phone Number</label>\n          <input type=\"tel\" v-model=\"profile.phone\" placeholder=\"+66 8x-xxx-xxxx\" />\n        </div>\n\n        <div class=\"form-group\">\n          <label>Address</label>\n          <textarea v-model=\"profile.address\" placeholder=\"Enter your address\"></textarea>\n        </div>\n      </div>\n\n      <div class=\"btn-row\">\n        <button class=\"btn save\" @click=\"saveProfile\">💾 Save</button>\n        <button class=\"btn reset\" @click=\"resetProfile\">↩ Reset</button>\n      </div>\n    </section>\n  </div>\n</template>\n\n<script>\n  export default {\n  data() {\n    return {\n      profile: {\n        name: \"\",\n        email: \"\",\n        phone: \"\",\n        address: \"\",\n        avatar: \"\", // 🔹 เพิ่มช่องเก็บรูปโปรไฟล์\n      },\n    };\n  },\n\n  mounted() {\n    console.log(\"🟢 User Profile UI ready\");\n\n    // ✅ Watch msg จาก Node-RED (เหมือน Alert / History)\n    this.$watch(\n      \"msg\",\n      (newMsg) => {\n        console.log(\"📩 Full msg received:\", newMsg);\n        const payload =\n          newMsg?.payload?.profile\n            ? newMsg.payload\n            : newMsg?.payload?.payload || {};\n\n        if (payload.profile) {\n          console.log(\"✅ Updating profile:\", payload.profile);\n          this.profile = { ...this.profile, ...payload.profile };\n        } else {\n          console.warn(\"⚠️ No profile object found in payload\", payload);\n        }\n      },\n      { immediate: true, deep: true }\n    );\n  },\n\n  methods: {\n    saveProfile() {\n      console.log(\"💾 Saving profile:\", this.profile);\n      this.send({ payload: { profile: this.profile } });\n    },\n    resetProfile() {\n      this.profile = { name: \"\", email: \"\", phone: \"\", address: \"\", avatar: \"\" };\n    },\n\n    // 📸 เมื่ออัปโหลดรูปใหม่\n    onAvatarChange(event) {\n      const file = event.target.files[0];\n      if (!file) return;\n      const reader = new FileReader();\n      reader.onload = (e) => {\n        this.profile.avatar = e.target.result;\n        console.log(\"🖼️ New avatar loaded\");\n      };\n      reader.readAsDataURL(file);\n    },\n  },\n};\n</script>\n\n<style scoped>\n  @import url(\"https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap\");\n\n  * {\n    font-family: \"Inter\", sans-serif;\n    box-sizing: border-box;\n  }\n\n  .container {\n    max-width: 900px;\n    margin: auto;\n    padding: 25px 35px;\n    background: #ffffff;\n    border-radius: 20px;\n    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05);\n  }\n\n  .header {\n    display: flex;\n    align-items: center;\n    margin-bottom: 20px;\n  }\n\n  .logo {\n    font-size: 28px;\n    font-weight: bold;\n    color: #2ecc71;\n    display: flex;\n    align-items: center;\n    gap: 8px;\n  }\n\n  .card {\n    background: #fff;\n    border-radius: 15px;\n    padding: 20px 25px;\n    margin-bottom: 20px;\n    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);\n  }\n\n  .gradient {\n    background: linear-gradient(to right, #e8f8f5, #f9fdf8);\n  }\n\n  /* ---------- Avatar ---------- */\n  .avatar-wrapper {\n    position: relative;\n    display: flex;\n    align-items: center;\n    justify-content: center;\n  }\n\n  .avatar,\n  .avatar-placeholder {\n    width: 90px;\n    height: 90px;\n    border-radius: 50%;\n    object-fit: cover;\n    background: #f0f0f0;\n    display: flex;\n    align-items: center;\n    justify-content: center;\n    font-size: 50px;\n  }\n\n  .upload-btn {\n    position: absolute;\n    bottom: 0;\n    right: 0;\n    background: #2ecc71;\n    color: white;\n    border-radius: 50%;\n    width: 28px;\n    height: 28px;\n    display: flex;\n    align-items: center;\n    justify-content: center;\n    cursor: pointer;\n    font-size: 14px;\n    border: 2px solid #fff;\n  }\n\n  .upload-btn input {\n    display: none;\n  }\n\n  /* ---------- Profile Info ---------- */\n  .profile-summary {\n    display: flex;\n    align-items: center;\n    gap: 20px;\n  }\n\n  .info h2 {\n    margin: 0;\n    font-size: 22px;\n  }\n\n  .info .email {\n    color: #777;\n    font-size: 15px;\n  }\n\n  /* ---------- Form ---------- */\n  .profile-form h3 {\n    margin-bottom: 15px;\n    font-weight: 600;\n    color: #333;\n  }\n\n  .form-grid {\n    display: grid;\n    grid-template-columns: 1fr 1fr;\n    gap: 20px;\n  }\n\n  .form-group {\n    display: flex;\n    flex-direction: column;\n  }\n\n  label {\n    font-weight: 600;\n    margin-bottom: 5px;\n  }\n\n  input,\n  textarea {\n    border: 1px solid #ddd;\n    border-radius: 10px;\n    padding: 10px 12px;\n    font-size: 15px;\n    outline: none;\n    transition: 0.2s;\n  }\n\n  textarea {\n    resize: vertical;\n    min-height: 80px;\n  }\n\n  input:focus,\n  textarea:focus {\n    border-color: #2ecc71;\n    box-shadow: 0 0 5px rgba(46, 204, 113, 0.3);\n  }\n\n  /* ---------- Buttons ---------- */\n  .btn-row {\n    margin-top: 25px;\n    display: flex;\n    gap: 15px;\n    justify-content: flex-end;\n  }\n\n  .btn {\n    border: none;\n    padding: 10px 18px;\n    border-radius: 10px;\n    cursor: pointer;\n    font-weight: 600;\n    transition: 0.2s;\n  }\n\n  .btn.save {\n    background: #2ecc71;\n    color: white;\n  }\n\n  .btn.reset {\n    background: #e0e0e0;\n  }\n\n  .btn.save:hover {\n    background: #27ae60;\n  }\n\n  .btn.reset:hover {\n    background: #d6d6d6;\n  }\n\n  /* ---------- Responsive ---------- */\n  @media (max-width: 600px) {\n    .form-grid {\n      grid-template-columns: 1fr;\n    }\n\n    .container {\n      padding: 15px;\n    }\n\n    .logo {\n      font-size: 22px;\n    }\n  }\n</style>",
+        "storeOutMessages": true,
+        "passthru": true,
+        "resendOnRefresh": true,
+        "templateScope": "widget:page",
+        "className": "",
+        "x": 550,
+        "y": 2160,
+        "wires": [
+            [
+                "5424559cd5e1fe1a",
+                "560a88a71082b01f"
+            ]
+        ]
+    },
+    {
+        "id": "2c8b4e692cea257f",
+        "type": "mqtt-broker",
+        "name": "",
+        "broker": "20.244.31.58",
+        "port": 1883,
+        "clientid": "",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": 4,
+        "keepalive": 60,
+        "cleansession": true,
+        "autoUnsubscribe": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthRetain": "false",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closeRetain": "false",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willRetain": "false",
+        "willPayload": "",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    },
+    {
+        "id": "0f92581db7809ed0",
+        "type": "mongodb4-client",
+        "name": "",
+        "protocol": "mongodb+srv",
+        "hostname": "",
+        "port": "",
+        "dbName": "DB-Embedded",
+        "appName": "",
+        "authSource": "",
+        "authMechanism": "DEFAULT",
+        "tls": false,
+        "tlsCAFile": "",
+        "tlsCertificateKeyFile": "",
+        "tlsInsecure": false,
+        "connectTimeoutMS": "30000",
+        "socketTimeoutMS": "0",
+        "minPoolSize": "0",
+        "maxPoolSize": "100",
+        "maxIdleTimeMS": "0",
+        "uri": "mongodb+srv://<username>:<password>@embed.alwx0x2.mongodb.net/",
+        "advanced": "{}",
+        "uriTabActive": "tab-uri-advanced"
+    },
+    {
+        "id": "99500c75740deac0",
+        "type": "ui-group",
+        "name": "",
+        "page": "7d13294289160470",
+        "width": "14",
+        "height": "9",
+        "order": 1,
+        "showTitle": true,
+        "className": "",
+        "visible": "true",
+        "disabled": "false",
+        "groupType": "default"
+    },
+    {
+        "id": "6ce8bb740ae3a167",
+        "type": "ui-group",
+        "name": "",
+        "page": "b5746d063364ee1a",
+        "width": 12,
+        "height": 1,
+        "order": 1,
+        "showTitle": true,
+        "className": "",
+        "visible": "true",
+        "disabled": "false",
+        "groupType": "default"
+    },
+    {
+        "id": "0150152643a14a93",
+        "type": "ui-group",
+        "name": "",
+        "page": "59cc18a1939b7133",
+        "width": 12,
+        "height": 1,
+        "order": 1,
+        "showTitle": true,
+        "className": "",
+        "visible": true,
+        "disabled": "false",
+        "groupType": "default"
+    },
+    {
+        "id": "afdc5aca318c96a8",
+        "type": "ui-group",
+        "name": "",
+        "page": "20c5110bd4bf25de",
+        "width": 12,
+        "height": 1,
+        "order": 1,
+        "showTitle": true,
+        "className": "",
+        "visible": "true",
+        "disabled": "false",
+        "groupType": "default"
+    },
+    {
+        "id": "4165bf4464c23945",
+        "type": "ui-page",
+        "name": "History",
+        "ui": "c8e43f0ce12a90a4",
+        "path": "/History01",
+        "icon": "home",
+        "layout": "grid",
+        "theme": "d7af8d328973b9c8",
+        "breakpoints": [
+            {
+                "name": "Default",
+                "px": "0",
+                "cols": "3"
+            },
+            {
+                "name": "Tablet",
+                "px": "576",
+                "cols": "6"
+            },
+            {
+                "name": "Small Desktop",
+                "px": "768",
+                "cols": "9"
+            },
+            {
+                "name": "Desktop",
+                "px": "1024",
+                "cols": "12"
+            }
+        ],
+        "order": 2,
+        "className": "",
+        "visible": true,
+        "disabled": false
+    },
+    {
+        "id": "94fefa3ff5bc8281",
+        "type": "ui-group",
+        "name": "Alerts Group",
+        "page": "e0fe5feb8992cf5b",
+        "width": 12,
+        "height": "12",
+        "order": 1,
+        "showTitle": false,
+        "className": "",
+        "visible": "true",
+        "disabled": "false",
+        "groupType": "default"
+    },
+    {
+        "id": "7d5b05598da17b0f",
+        "type": "ui-page",
+        "name": "Profile",
+        "ui": "c8e43f0ce12a90a4",
+        "path": "/profile",
+        "icon": "home",
+        "layout": "grid",
+        "theme": "d7af8d328973b9c8",
+        "breakpoints": [
+            {
+                "name": "Default",
+                "px": "0",
+                "cols": "3"
+            },
+            {
+                "name": "Tablet",
+                "px": "576",
+                "cols": "6"
+            },
+            {
+                "name": "Small Desktop",
+                "px": "768",
+                "cols": "9"
+            },
+            {
+                "name": "Desktop",
+                "px": "1024",
+                "cols": "12"
+            }
+        ],
+        "order": 1,
+        "className": "",
+        "visible": "true",
+        "disabled": "false"
+    },
+    {
+        "id": "7d13294289160470",
+        "type": "ui-page",
+        "name": "Hear_Rate",
+        "ui": "c8e43f0ce12a90a4",
+        "path": "/page3",
+        "icon": "home",
+        "layout": "grid",
+        "theme": "d7af8d328973b9c8",
+        "breakpoints": [
+            {
+                "name": "Default",
+                "px": "0",
+                "cols": "3"
+            },
+            {
+                "name": "Tablet",
+                "px": "576",
+                "cols": "6"
+            },
+            {
+                "name": "Small Desktop",
+                "px": "768",
+                "cols": "9"
+            },
+            {
+                "name": "Desktop",
+                "px": "1024",
+                "cols": "12"
+            }
+        ],
+        "order": 5,
+        "className": "",
+        "visible": true,
+        "disabled": false
+    },
+    {
+        "id": "b5746d063364ee1a",
+        "type": "ui-page",
+        "name": "Medicine Schedule",
+        "ui": "c8e43f0ce12a90a4",
+        "path": "/page5",
+        "icon": "home",
+        "layout": "grid",
+        "theme": "d7af8d328973b9c8",
+        "breakpoints": [
+            {
+                "name": "Default",
+                "px": "0",
+                "cols": "3"
+            },
+            {
+                "name": "Tablet",
+                "px": "576",
+                "cols": "6"
+            },
+            {
+                "name": "Small Desktop",
+                "px": "768",
+                "cols": "9"
+            },
+            {
+                "name": "Desktop",
+                "px": "1024",
+                "cols": "12"
+            }
+        ],
+        "order": 7,
+        "className": "",
+        "visible": "true",
+        "disabled": "false"
+    },
+    {
+        "id": "59cc18a1939b7133",
+        "type": "ui-page",
+        "name": "setting",
+        "ui": "c8e43f0ce12a90a4",
+        "path": "/setting",
+        "icon": "home",
+        "layout": "grid",
+        "theme": "d7af8d328973b9c8",
+        "breakpoints": [
+            {
+                "name": "Default",
+                "px": "0",
+                "cols": "3"
+            },
+            {
+                "name": "Tablet",
+                "px": "576",
+                "cols": "6"
+            },
+            {
+                "name": "Small Desktop",
+                "px": "768",
+                "cols": "9"
+            },
+            {
+                "name": "Desktop",
+                "px": "1024",
+                "cols": "12"
+            }
+        ],
+        "order": 4,
+        "className": "",
+        "visible": true,
+        "disabled": false
+    },
+    {
+        "id": "20c5110bd4bf25de",
+        "type": "ui-page",
+        "name": "Emergency contact",
+        "ui": "c8e43f0ce12a90a4",
+        "path": "/page4",
+        "icon": "home",
+        "layout": "grid",
+        "theme": "d7af8d328973b9c8",
+        "breakpoints": [
+            {
+                "name": "Default",
+                "px": "0",
+                "cols": "3"
+            },
+            {
+                "name": "Tablet",
+                "px": "576",
+                "cols": "6"
+            },
+            {
+                "name": "Small Desktop",
+                "px": "768",
+                "cols": "9"
+            },
+            {
+                "name": "Desktop",
+                "px": "1024",
+                "cols": "12"
+            }
+        ],
+        "order": 6,
+        "className": "",
+        "visible": "true",
+        "disabled": "false"
+    },
+    {
+        "id": "c8e43f0ce12a90a4",
+        "type": "ui-base",
+        "name": "My Dashboard",
+        "path": "/dashboard",
+        "appIcon": "",
+        "includeClientData": true,
+        "acceptsClientConfig": [
+            "ui-notification",
+            "ui-control"
+        ],
+        "showPathInSidebar": false,
+        "headerContent": "page",
+        "navigationStyle": "default",
+        "titleBarStyle": "default",
+        "showReconnectNotification": true,
+        "notificationDisplayTime": 1,
+        "showDisconnectNotification": true,
+        "allowInstall": true
+    },
+    {
+        "id": "d7af8d328973b9c8",
+        "type": "ui-theme",
+        "name": "Default Theme",
+        "colors": {
+            "surface": "#ffffff",
+            "primary": "#0094CE",
+            "bgPage": "#eeeeee",
+            "groupBg": "#ffffff",
+            "groupOutline": "#cccccc"
+        },
+        "sizes": {
+            "density": "default",
+            "pagePadding": "12px",
+            "groupGap": "12px",
+            "groupBorderRadius": "4px",
+            "widgetGap": "12px"
+        }
+    },        
+    {
+        "id": "e0fe5feb8992cf5b",
+        "type": "ui-page",
+        "name": "Alerts",
+        "ui": "c8e43f0ce12a90a4",
+        "path": "/Alerts",
+        "icon": "home",
+        "layout": "grid",
+        "theme": "d7af8d328973b9c8",
+        "breakpoints": [
+            {
+                "name": "Default",
+                "px": "0",
+                "cols": "3"
+            },
+            {
+                "name": "Tablet",
+                "px": "576",
+                "cols": "6"
+            },
+            {
+                "name": "Small Desktop",
+                "px": "768",
+                "cols": "9"
+            },
+            {
+                "name": "Desktop",
+                "px": "1024",
+                "cols": "12"
+            }
+        ],
+        "order": 3,
+        "className": "",
+        "visible": true,
+        "disabled": false
+    },
+    {
+        "id": "c3cfd465d6108cb8",
+        "type": "global-config",
+        "env": [],
+        "modules": {
+            "node-red-contrib-mongodb4": "3.1.1",
+            "@flowfuse/node-red-dashboard": "1.29.0"
+        }
+    }
+]
