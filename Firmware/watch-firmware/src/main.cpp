@@ -41,7 +41,7 @@ bool togle = true;
 // ========================
 WiFiManager wm;
 
-const char *mqtt_server = "20.244.31.58";
+const char *mqtt_server = "<IP_SERVER>";
 WiFiClient espClient;
 PubSubClient client(espClient);
 const char *watch_topic = "topic/heartrate";
@@ -259,3 +259,4 @@ void loop()
 
   
 }
+
